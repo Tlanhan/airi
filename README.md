@@ -286,11 +286,11 @@ Factorio uses the same pattern, communicating with the game server via the [Fact
 
 **Technical integration path:**
 
-The bridging approach mirrors the existing Discord/Telegram adapters:
+This pattern is already implemented in `services/openclaw/` in this repository:
 
-1. Create a new OpenClaw adapter in AIRI using `@proj-airi/server-sdk` to connect to AIRI's WebSocket event bus.
-2. Configure a webhook or WebSocket channel in OpenClaw to forward inbound messages to the AIRI adapter, which wraps them as `input:text` events.
-3. The adapter listens for AIRI's `output:gen-ai:chat:message` events and routes responses back through OpenClaw to the originating channel (WhatsApp, Signal, iMessage, etc.).
+1. `services/openclaw/` is an OpenClaw adapter service that uses `@proj-airi/server-sdk` to connect to AIRI's WebSocket event bus, while also starting an HTTP listener on port 6122 (configurable).
+2. Configure OpenClaw to POST inbound messages to `http://localhost:6122/webhook`. The adapter wraps them as `input:text` events.
+3. The adapter listens for AIRI's `output:gen-ai:chat:message` events and can route responses back through OpenClaw to the originating channel (WhatsApp, Signal, iMessage, etc.).
 
 ## Current Progress
 

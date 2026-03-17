@@ -278,11 +278,11 @@ Factorio 的实现思路相同，通过 [RCON API 实现](https://github.com/nek
 
 **技术集成路径：**
 
-两者的桥接方式与现有 Discord/Telegram 适配器完全相同：
+两者的桥接方式与现有 Discord/Telegram 适配器完全相同，已在本仓库的 `services/openclaw/` 中实现：
 
-1. 在 AIRI 中新建一个 OpenClaw 适配器，使用 `@proj-airi/server-sdk` 连接 AIRI 的 WebSocket 事件总线。
-2. 在 OpenClaw 中配置一个 Webhook 或 WebSocket 频道，将入站消息转发到 AIRI 适配器，由适配器包装为 `input:text` 事件发送给 AIRI。
-3. 适配器监听 AIRI 的 `output:gen-ai:chat:message` 事件，将回复经由 OpenClaw 路由回原始频道（WhatsApp、Signal、iMessage 等）。
+1. `services/openclaw/` 中的 OpenClaw 适配器使用 `@proj-airi/server-sdk` 连接 AIRI 的 WebSocket 事件总线，并在本地启动一个 HTTP 监听服务（默认端口 6122）。
+2. 在 OpenClaw 中配置 Webhook 频道，将入站消息 POST 到 `http://localhost:6122/webhook`，适配器将其包装为 `input:text` 事件发送给 AIRI。
+3. 适配器监听 AIRI 的 `output:gen-ai:chat:message` 事件，将 アイリ 的回复经由 OpenClaw 路由回原始频道（WhatsApp、Signal、iMessage 等）。
 
 ## 当前进度
 

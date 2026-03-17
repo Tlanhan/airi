@@ -15,6 +15,27 @@ export interface Discord {
   channelId?: string
 }
 
+export interface OpenClawSender {
+  id?: string
+  name?: string
+}
+
+/**
+ * OpenClaw-specific metadata attached to input events.
+ * OpenClaw is a local-first personal AI assistant gateway that bridges 20+
+ * messaging platforms (WhatsApp, Signal, iMessage, LINE, Slack, Matrix, etc.).
+ *
+ * @see https://github.com/openclaw/openclaw
+ */
+export interface OpenClaw {
+  /** The messaging platform the message originated from (e.g. "whatsapp", "telegram"). */
+  platform?: string
+  /** The channel/chat identifier within the platform. */
+  channelId?: string
+  /** The sender's identity information. */
+  sender?: OpenClawSender
+}
+
 export interface PluginIdentity {
   /**
    * Stable plugin identifier (shared across instances).
@@ -379,6 +400,7 @@ interface InputSource {
   'stage-web': boolean
   'stage-tamagotchi': boolean
   'discord': Discord
+  'openclaw': OpenClaw
 }
 
 interface OutputSource {
@@ -445,7 +467,7 @@ export interface WebSocketEventInputTextBase {
   contextUpdates?: InputContextUpdate[]
 }
 
-export type WebSocketEventInputText = WebSocketEventInputTextBase & Partial<WithInputSource<'stage-web' | 'stage-tamagotchi' | 'discord'>>
+export type WebSocketEventInputText = WebSocketEventInputTextBase & Partial<WithInputSource<'stage-web' | 'stage-tamagotchi' | 'discord' | 'openclaw'>>
 
 export interface WebSocketEventInputTextVoiceBase {
   transcription: string
@@ -454,7 +476,7 @@ export interface WebSocketEventInputTextVoiceBase {
   contextUpdates?: InputContextUpdate[]
 }
 
-export type WebSocketEventInputTextVoice = WebSocketEventInputTextVoiceBase & Partial<WithInputSource<'stage-web' | 'stage-tamagotchi' | 'discord'>>
+export type WebSocketEventInputTextVoice = WebSocketEventInputTextVoiceBase & Partial<WithInputSource<'stage-web' | 'stage-tamagotchi' | 'discord' | 'openclaw'>>
 
 export interface WebSocketEventInputVoiceBase {
   audio: ArrayBuffer
@@ -462,7 +484,7 @@ export interface WebSocketEventInputVoiceBase {
   contextUpdates?: InputContextUpdate[]
 }
 
-export type WebSocketEventInputVoice = WebSocketEventInputVoiceBase & Partial<WithInputSource<'stage-web' | 'stage-tamagotchi' | 'discord'>>
+export type WebSocketEventInputVoice = WebSocketEventInputVoiceBase & Partial<WithInputSource<'stage-web' | 'stage-tamagotchi' | 'discord' | 'openclaw'>>
 
 export type InputEventData = WebSocketEventInputText | WebSocketEventInputTextVoice | WebSocketEventInputVoice
 
