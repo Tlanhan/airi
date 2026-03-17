@@ -267,6 +267,31 @@ Action layer:      calls game APIs to execute moves
 
 Factorio uses the same pattern, communicating with the game server via the [Factorio RCON API implementation](https://github.com/nekomeowww/factorio-rcon-api). See the [AIRI Factorio](https://github.com/moeru-ai/airi-factorio) sub-project for details.
 
+### What could be done by combining OpenClaw with AIRI?
+
+[OpenClaw](https://github.com/openclaw/openclaw) is a local-first personal AI assistant that supports 20+ messaging platforms (WhatsApp, Signal, iMessage/BlueBubbles, LINE, Slack, Matrix, Microsoft Teams, IRC, Twitch, and more), voice wake/listen on macOS/iOS/Android, a Live Canvas, and a rich tool/skill system. Combining the two projects unlocks compelling complementary capabilities:
+
+**What OpenClaw brings to AIRI:**
+
+- **Universal messaging inbox**: AIRI currently has native adapters for Discord and Telegram. OpenClaw covers the remaining 20+ platforms. Using OpenClaw as a unified message gateway, アイリ can interact with fans on WhatsApp, Signal, iMessage, LINE, Slack, Matrix, and more — without writing a separate adapter for each one.
+- **Voice wake & continuous voice mode**: OpenClaw provides Voice Wake and Talk Mode on macOS/iOS/Android, which can feed directly into アイリ's speech-recognition pipeline, giving the character a truly hands-free, always-listening interaction mode.
+- **Live Canvas for avatar display**: OpenClaw's agent-driven Canvas (A2UI) renders interactive visual content on macOS/iOS/Android and could be used to display アイリ's VRM or Live2D avatar, making OpenClaw's assistant appear as a full VTuber character.
+- **Tools & skills**: OpenClaw's built-in tools (browser, cron, canvas operations, etc.) can be exposed to アイリ's LLM as callable skills, expanding what the character can do autonomously.
+
+**What AIRI brings to OpenClaw:**
+
+- **VTuber persona & virtual avatar**: OpenClaw has no built-in character or avatar. AIRI contributes full Live2D/VRM rendering with auto-blinking, gaze tracking, expressions, and animations — giving OpenClaw's assistant a face, a voice, and a personality.
+- **Autonomous game agents**: AIRI's Minecraft/Factorio game agents can push live updates to users over any of OpenClaw's channels — for example, broadcasting Minecraft adventure updates to a WhatsApp group in real time.
+- **Roleplay & emotional dialogue**: AIRI's roleplay-optimized reasoning, emotion expression, and multi-turn conversation can inject a personalized "soul" into OpenClaw's general-purpose assistant pipeline.
+
+**Technical integration path:**
+
+The bridging approach mirrors the existing Discord/Telegram adapters:
+
+1. Create a new OpenClaw adapter in AIRI using `@proj-airi/server-sdk` to connect to AIRI's WebSocket event bus.
+2. Configure a webhook or WebSocket channel in OpenClaw to forward inbound messages to the AIRI adapter, which wraps them as `input:text` events.
+3. The adapter listens for AIRI's `output:gen-ai:chat:message` events and routes responses back through OpenClaw to the originating channel (WhatsApp, Signal, iMessage, etc.).
+
 ## Current Progress
 
 Capable of

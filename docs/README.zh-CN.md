@@ -259,6 +259,31 @@ Project AIRI 是一个开源的 AI VTuber（虚拟 YouTuber）平台，深受 [N
 
 Factorio 的实现思路相同，通过 [RCON API 实现](https://github.com/nekomeowww/factorio-rcon-api) 与游戏服务器通信。详见 [AIRI Factorio](https://github.com/moeru-ai/airi-factorio) 子项目。
 
+### 如果将 OpenClaw 与 AIRI 结合，能做什么？
+
+[OpenClaw](https://github.com/openclaw/openclaw) 是一个本地优先（local-first）的个人 AI 助手，支持 20 余个消息平台（WhatsApp、Signal、iMessage/BlueBubbles、LINE、Slack、Matrix、Microsoft Teams、IRC、Twitch 等）并提供语音唤醒、Live Canvas 以及丰富的工具/技能系统。将两者结合，可以实现以下互补：
+
+**OpenClaw 为 AIRI 提供：**
+
+- **多平台消息入口**：AIRI 目前原生支持 Discord 和 Telegram，而 OpenClaw 覆盖了其余 20 余个平台。通过将 OpenClaw 作为统一的消息网关，无需单独为每个平台编写适配器，アイリ 就能与 WhatsApp、Signal、iMessage、LINE、Slack、Matrix 等平台上的粉丝互动。
+- **语音唤醒与持续对话**：OpenClaw 在 macOS/iOS/Android 上支持语音唤醒（Voice Wake）和持续对话模式（Talk Mode），可作为 アイリ 语音识别管道的输入端，为 アイリ 提供真正"免提"的交互体验。
+- **Live Canvas 展示**：OpenClaw 的 Canvas 可在 macOS/iOS/Android 上渲染 agent 驱动的视觉界面（A2UI），可以用来展示 アイリ 的 VRM 或 Live2D 虚拟形象，让 OpenClaw 的助手以 VTuber 角色呈现。
+- **工具/技能系统**：OpenClaw 拥有浏览器工具、定时任务（cron）、Canvas 操作等内置技能，可暴露给 アイリ 的 LLM 作为可调用能力，扩展 アイリ 的行动范围。
+
+**AIRI 为 OpenClaw 提供：**
+
+- **VTuber 角色与虚拟形象**：OpenClaw 没有内置虚拟形象，AIRI 为其提供完整的 Live2D/VRM 角色渲染、自动眨眼、视线跟踪、表情与动作，让 OpenClaw 助手真正"有脸有声"。
+- **游戏自主代理**：AIRI 的 Minecraft/Factorio 游戏代理可通过 OpenClaw 的任意频道将游戏进展推送给用户——例如在 WhatsApp 上实时播报 Minecraft 冒险动态。
+- **角色扮演与情感对话**：AIRI 针对 VTuber 场景优化了角色扮演、情绪表达和多轮对话，可为 OpenClaw 的通用助手流程注入个性化"灵魂"。
+
+**技术集成路径：**
+
+两者的桥接方式与现有 Discord/Telegram 适配器完全相同：
+
+1. 在 AIRI 中新建一个 OpenClaw 适配器，使用 `@proj-airi/server-sdk` 连接 AIRI 的 WebSocket 事件总线。
+2. 在 OpenClaw 中配置一个 Webhook 或 WebSocket 频道，将入站消息转发到 AIRI 适配器，由适配器包装为 `input:text` 事件发送给 AIRI。
+3. 适配器监听 AIRI 的 `output:gen-ai:chat:message` 事件，将回复经由 OpenClaw 路由回原始频道（WhatsApp、Signal、iMessage 等）。
+
 ## 当前进度
 
 目前已经能做到：
