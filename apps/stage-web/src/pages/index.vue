@@ -64,18 +64,30 @@ const { streamingMessage } = storeToRefs(chatStreamStore)
 // visible for 5 s and then the bubble fades out.
 const showBubble = ref(false)
 const bubbleTextCache = ref('')
-let hideBubbleTimer: ReturnType<typeof setTimeout> | undefined
+let hideBubbleTimeout: ReturnType<typeof setTimeout> | undefined
+
+// NOTICE: flush:'sync' is required here because finalizeStream() resets
+// streamingMessage.content back to '' synchronously, and sending is set to
+// false immediately after in the same call-stack tick. Without sync flush the
+// default async watcher would only see the already-reset '' value, losing the
+// final response text. With sync flush this watcher fires on every token as it
+// arrives, keeping bubbleTextCache up-to-date so it survives the reset.
+watch(() => streamingMessage.value?.content, (content) => {
+  if (content)
+    bubbleTextCache.value = content
+}, { flush: 'sync' })
 
 watch(sending, (isNowSending, wasSending) => {
   if (isNowSending) {
-    clearTimeout(hideBubbleTimer)
-    bubbleTextCache.value = ''
+    clearTimeout(hideBubbleTimeout)
+    bubbleTextCache.value = '' // clear previous response before new one starts
     showBubble.value = true
     return
   }
   if (wasSending) {
-    bubbleTextCache.value = streamingMessage.value?.content ?? ''
-    hideBubbleTimer = setTimeout(() => {
+    // bubbleTextCache was kept up-to-date by the sync watcher above,
+    // so it still holds the final response text even after finalizeStream reset.
+    hideBubbleTimeout = setTimeout(() => {
       showBubble.value = false
       bubbleTextCache.value = ''
     }, 5000)
@@ -165,7 +177,7 @@ watch(enabled, async (val) => {
 
 onUnmounted(() => {
   stopAudioInteraction()
-  clearTimeout(hideBubbleTimer)
+  clearTimeout(hideBubbleTimeout)
 })
 
 watch([stream, () => vadLoaded.value], async ([s, loaded]) => {
@@ -228,8 +240,8 @@ watch([stream, () => vadLoaded.value], async ([s, loaded]) => {
               ]"
             >
               <ChatBubbleMinimalism
-                :loading="sending"
-                :text="!sending ? bubbleTextCache : undefined"
+                :loading="sending && !bubbleTextCache"
+                :text="bubbleTextCache || undefined"
                 side="right"
               />
             </div>
