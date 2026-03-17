@@ -91,11 +91,13 @@ function clearHistory() {
 
     <!-- Chat history preview -->
     <div
-      flex="~ col"
-      h-64 min-h-40
-      rounded-xl border border-neutral-200 dark:border-neutral-800
-      bg-neutral-50/50 dark:bg-neutral-900/50
-      overflow-hidden
+      :class="[
+        'flex flex-col',
+        'h-64 min-h-40',
+        'rounded-xl border border-neutral-200 dark:border-neutral-800',
+        'bg-neutral-50/50 dark:bg-neutral-900/50',
+        'overflow-hidden',
+      ]"
     >
       <ChatHistory
         :messages="historyMessages"
@@ -121,7 +123,7 @@ function clearHistory() {
           :disabled="isSimulating"
           @click="injectSimulatedResponse"
         >
-          <div v-if="isSimulating" i-svg-spinners:3-dots-scale mr-1 />
+          <span v-if="isSimulating" class="i-svg-spinners:3-dots-scale mr-1"></span>
           {{ isSimulating ? 'Streaming…' : '▶ Inject simulated response' }}
         </Button>
         <Button
@@ -143,7 +145,7 @@ function clearHistory() {
         How to see the chat bubble on the avatar:
       </p>
       <ol list-decimal list-inside space-y-1>
-        <li>Return to the main stage page (<strong>/</strong>).</li>
+        <li>Return to the main stage page (route <code>/</code>).</li>
         <li>The right-hand panel shows chat history — that is the message popup area.</li>
         <li>
           On mobile the chat history is inside the drawer at the bottom of the screen.
