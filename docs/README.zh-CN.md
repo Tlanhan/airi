@@ -190,6 +190,40 @@
 >
 > **如果你已经感兴趣了，为什么不来这里和大家打个招呼呢？[Would like to join part of us to build AIRI?](https://github.com/moeru-ai/airi/discussions/33)**
 
+## 常见问题（FAQ）
+
+### 这是一个什么项目？
+
+Project AIRI 是一个开源的 AI VTuber（虚拟 YouTuber）平台，深受 [Neuro-sama](https://www.youtube.com/@Neurosama) 启发。它提供了一个"灵魂容器"，让 AI 驱动的虚拟角色能够：
+
+- 与用户进行实时对话
+- 自主玩游戏（Minecraft、Factorio 等）
+- 通过 Discord、Telegram 等平台与粉丝互动
+- 以 Live2D 或 VRM 模型呈现，拥有表情、动作和语音
+
+### 它能做什么？
+
+详见下方[当前进度](#当前进度)章节。简而言之，アイリ 目前可以：
+
+- 🧠 **大脑**：连接各类 LLM 服务商（OpenAI、Claude、DeepSeek 等），进行角色扮演与对话
+- 👂 **耳朵**：语音识别（浏览器 / Discord 音频输入）
+- 👄 **嘴巴**：语音合成（ElevenLabs 等 TTS 服务）
+- 🎮 **游戏代理**：自主玩 Minecraft、Factorio
+- 💬 **聊天集成**：在 Telegram、Discord 中实时聊天
+- 🧍 **虚拟形象**：支持 VRM 与 Live2D 模型，带有自动眨眼、视线跟踪等动画
+
+### 是否支持魔改？
+
+**当然支持！** Project AIRI 以 [MIT 许可证](../LICENSE)开源，你可以自由地：
+
+- **Fork 并修改**：按照自己的需求定制任何部分，包括 UI、角色设定、行为逻辑等
+- **添加新功能**：项目已有 WIP 插件系统，未来将支持更灵活的扩展方式
+- **更换 LLM 服务商**：支持 20 余种 LLM 服务商，也支持 Ollama、vLLM 等本地部署方案
+- **替换角色模型**：可以替换为你喜欢的 VRM 或 Live2D 模型
+- **集成新游戏或平台**：参考现有的 Minecraft / Factorio 代理实现，接入其他游戏或通讯平台
+
+欢迎将你的魔改以 PR 的形式贡献回主仓库！有任何问题，欢迎加入我们的 [Discord](https://discord.gg/TgQ3Cu2F7A) 社区交流。
+
 ## 当前进度
 
 目前已经能做到：

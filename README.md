@@ -198,6 +198,40 @@ This means that **アイリ is capable of running on modern browsers and devices
 >
 > **If you are interested, why not introduce yourself here? [Would like to join part of us to build AIRI?](https://github.com/moeru-ai/airi/discussions/33)**
 
+## Frequently Asked Questions (FAQ)
+
+### What kind of project is this?
+
+Project AIRI is an open-source AI VTuber (Virtual YouTuber) platform, heavily inspired by [Neuro-sama](https://www.youtube.com/@Neurosama). It provides a "soul container" that lets AI-driven virtual characters:
+
+- Engage in real-time conversations with users
+- Autonomously play games (Minecraft, Factorio, etc.)
+- Interact with fans via platforms like Discord and Telegram
+- Be presented as Live2D or VRM models with expressions, animations, and voice
+
+### What can it do?
+
+See the [Current Progress](#current-progress) section below for full details. In brief, アイリ can currently:
+
+- 🧠 **Brain**: Connect to various LLM providers (OpenAI, Claude, DeepSeek, etc.) for roleplay and conversation
+- 👂 **Ears**: Speech recognition (browser / Discord audio input)
+- 👄 **Mouth**: Speech synthesis (ElevenLabs and other TTS services)
+- 🎮 **Game Agent**: Autonomously play Minecraft and Factorio
+- 💬 **Chat Integration**: Real-time chatting in Telegram and Discord
+- 🧍 **Virtual Avatar**: VRM and Live2D model support with auto-blinking, gaze tracking, and other animations
+
+### Does it support customization / modding?
+
+**Absolutely!** Project AIRI is open-source under the [MIT license](./LICENSE). You are free to:
+
+- **Fork and modify**: Customize any part to your liking, including UI, character persona, and behavior logic
+- **Add new features**: The project has a WIP plugin system that will support even more flexible extensibility in the future
+- **Swap LLM providers**: 20+ LLM providers are supported, including local deployments via Ollama and vLLM
+- **Replace the character model**: Swap in your favorite VRM or Live2D model
+- **Integrate new games or platforms**: Use the existing Minecraft / Factorio agent implementations as a reference to connect other games or communication platforms
+
+PRs are welcome to contribute your customizations back to the main repository! For any questions, feel free to join our [Discord](https://discord.gg/TgQ3Cu2F7A) community.
+
 ## Current Progress
 
 Capable of
