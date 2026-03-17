@@ -14,6 +14,13 @@
  *    Optionally:
  *      pnpm -F @proj-airi/openclaw dev          (port 6122, for --webhook mode)
  *
+ *  - An LLM provider and model must be configured in stage-web:
+ *      Open stage-web in the browser → Settings → Modules → Consciousness
+ *      Select a provider (e.g. Ollama, OpenAI) and a model.
+ *      Without this, stage-web silently drops incoming messages — you will see
+ *      "input:text" in the WebSocket Inspector (Incoming) but no
+ *      "output:gen-ai:chat:message" (Outgoing).
+ *
  * Usage
  * -----
  *  # Mode 1 – Webhook (requires the openclaw service on port 6122):
@@ -35,6 +42,15 @@
  *  The avatar should receive the message, process it through the LLM, and a
  *  ChatBubbleMinimalism overlay should appear above the avatar showing the reply.
  *  The response is also printed to the console here.
+ *
+ * Troubleshooting — script times out / no response
+ * -------------------------------------------------
+ *  If the script prints a timeout error and you see only "Incoming" events in
+ *  the stage-web WebSocket Inspector (no "Outgoing" output:gen-ai:chat:message),
+ *  the most common cause is that no LLM provider or model has been configured:
+ *    Open stage-web → Settings → Modules → Consciousness → select a provider and model.
+ *  After configuring, re-run the script.
+ *  You can also check the browser console for a "[context-bridge]" warning.
  */
 
 import { argv } from 'node:process'

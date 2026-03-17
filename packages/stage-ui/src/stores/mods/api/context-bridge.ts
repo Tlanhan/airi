@@ -88,67 +88,74 @@ export const useContextBridgeStore = defineStore('mods:api:context-bridge', () =
           }
         }
 
-        if (activeProvider.value && activeModel.value) {
-          let chatProvider: ChatProvider
+        if (!activeProvider.value || !activeModel.value) {
+          console.warn(
+            '[context-bridge] Received input:text event but no LLM provider/model is configured. '
+            + 'Go to Settings → Modules → Consciousness and select a provider and model before sending messages. '
+            + `(activeProvider=${JSON.stringify(activeProvider.value)}, activeModel=${JSON.stringify(activeModel.value)})`,
+          )
+          return
+        }
+
+        let chatProvider: ChatProvider
+        try {
+          chatProvider = await providersStore.getProviderInstance<ChatProvider>(activeProvider.value)
+        }
+        catch (err) {
+          console.error('[context-bridge] getProviderInstance failed for provider:', activeProvider.value, err)
+          return
+        }
+
+        let messageText = text
+        const targetSessionId = overrides?.sessionId
+
+        if (overrides?.messagePrefix) {
+          messageText = `${overrides.messagePrefix}${text}`
+        }
+
+        // TODO(@nekomeowww): This only guard for input:text events handling and doesn't cover the entire ingestion
+        // process. Another critical path of spark:notify is affected too, I think for better future development
+        // experience, we should discover and find either a leader election or distributed lock solution to
+        // coordinate the modules that handles context bridge ingestion across multiple windows/tabs.
+        //
+        // Background behind this, as server-sdk is in fact integrated in every Stage Web window/tab, each
+        // window/tab has its own connection & chat orchestrator instance, when multiple windows/tabs are open,
+        // each of them will receive the same input:text event and process ingestion independently, causing
+        // duplicated messages handling and output:* events emission.
+        //
+        // We don't have ability to control how many windows/tabs the user will open (sometimes) user will forget
+        // to close the extra windows/tabs, so we need a way to coordinate the ingestion processing to
+        // ensure only one window/tab is handling the ingestion at a time.
+        //
+        // SharedWorker solution was considered but it's completely disabled in Chromium based Android browsers
+        // (which is a big portion of mobile Stage Web users as stage-ui serves as the unified / universal
+        // api wrapper for most of the shared logic across Web, Pocket, and Tamagotchi).
+        //
+        // Read more here:
+        // - https://chromestatus.com/feature/6265472244514816
+        // - https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker
+        // - https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
+        navigator.locks.request('context-bridge:event:input:text', async () => {
           try {
-            chatProvider = await providersStore.getProviderInstance<ChatProvider>(activeProvider.value)
+            await chatOrchestrator.ingest(messageText, {
+              model: activeModel.value,
+              chatProvider,
+              input: {
+                type: 'input:text',
+                data: {
+                  ...event.data,
+                  text,
+                  textRaw,
+                  overrides,
+                  contextUpdates: normalizedContextUpdates,
+                },
+              },
+            }, targetSessionId)
           }
           catch (err) {
-            console.error('[context-bridge] getProviderInstance failed for provider:', activeProvider.value, err)
-            return
+            console.error('Error ingesting text input via context bridge:', err)
           }
-
-          let messageText = text
-          const targetSessionId = overrides?.sessionId
-
-          if (overrides?.messagePrefix) {
-            messageText = `${overrides.messagePrefix}${text}`
-          }
-
-          // TODO(@nekomeowww): This only guard for input:text events handling and doesn't cover the entire ingestion
-          // process. Another critical path of spark:notify is affected too, I think for better future development
-          // experience, we should discover and find either a leader election or distributed lock solution to
-          // coordinate the modules that handles context bridge ingestion across multiple windows/tabs.
-          //
-          // Background behind this, as server-sdk is in fact integrated in every Stage Web window/tab, each
-          // window/tab has its own connection & chat orchestrator instance, when multiple windows/tabs are open,
-          // each of them will receive the same input:text event and process ingestion independently, causing
-          // duplicated messages handling and output:* events emission.
-          //
-          // We don't have ability to control how many windows/tabs the user will open (sometimes) user will forget
-          // to close the extra windows/tabs, so we need a way to coordinate the ingestion processing to
-          // ensure only one window/tab is handling the ingestion at a time.
-          //
-          // SharedWorker solution was considered but it's completely disabled in Chromium based Android browsers
-          // (which is a big portion of mobile Stage Web users as stage-ui serves as the unified / universal
-          // api wrapper for most of the shared logic across Web, Pocket, and Tamagotchi).
-          //
-          // Read more here:
-          // - https://chromestatus.com/feature/6265472244514816
-          // - https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker
-          // - https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
-          navigator.locks.request('context-bridge:event:input:text', async () => {
-            try {
-              await chatOrchestrator.ingest(messageText, {
-                model: activeModel.value,
-                chatProvider,
-                input: {
-                  type: 'input:text',
-                  data: {
-                    ...event.data,
-                    text,
-                    textRaw,
-                    overrides,
-                    contextUpdates: normalizedContextUpdates,
-                  },
-                },
-              }, targetSessionId)
-            }
-            catch (err) {
-              console.error('Error ingesting text input via context bridge:', err)
-            }
-          })
-        }
+        })
       }))
 
       disposeHookFns.value.push(
