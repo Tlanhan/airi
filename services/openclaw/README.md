@@ -34,6 +34,16 @@ There is **no Discord/Telegram required** as a middleware. OpenClaw talks direct
 
 ## Quick start
 
+> **All four components below must be running together** for a message sent through this
+> service to produce a visible response on the avatar:
+>
+> | # | Component | Command | Purpose |
+> |---|---|---|---|
+> | 1 | **server-runtime** | `pnpm -F @proj-airi/server-runtime start` | WebSocket hub that routes events |
+> | 2 | **stage-web** (or tamagotchi) | `pnpm -F @proj-airi/stage-web dev` | Avatar UI that shows the chat bubble |
+> | 3 | **LLM provider** | Configured in stage-web Settings | Generates the avatar's reply |
+> | 4 | **openclaw-bot** (this service) | `pnpm start` | Bridges OpenClaw webhooks to the server |
+
 ### 1. Start the AIRI server
 
 ```bash
@@ -47,6 +57,22 @@ pnpm -F @proj-airi/stage-web dev
 # or the desktop app:
 pnpm -F @proj-airi/stage-tamagotchi dev
 ```
+
+Open **http://localhost:5173** (stage-web default) in your browser. The avatar should appear
+on the main page. The right-hand panel is the **chat history area** — this is where the
+avatar's replies appear as chat bubbles.
+
+### 2a. Configure an LLM provider
+
+Before the avatar can reply to messages, it needs a language-model backend:
+
+1. Open **Settings → Modules → Consciousness** in stage-web.
+2. Pick a provider (e.g. OpenAI, Anthropic, Ollama) and enter the API key / base URL.
+3. Select a model.
+
+> **Quick test without OpenClaw:** go to **Settings → Developer → Chat** in stage-web and
+> click **▶ Inject simulated response** to verify the chat bubble appears before involving
+> the full webhook pipeline.
 
 ### 3. Configure and start this service
 
@@ -115,6 +141,18 @@ curl.exe -X POST http://localhost:6122/webhook `
 > Use `GET /health` first to confirm the service is up: `curl http://localhost:6122/health`
 
 You should see アイリ's avatar display a chat bubble popup in response.
+
+> **I sent the curl request and got `{"ok":true}`, but I don't see the popup.**
+>
+> Work through this checklist:
+> 1. **Is stage-web open?** Open `http://localhost:5173` in a browser.
+> 2. **Is an LLM provider configured?** Without one the server receives the event but has
+>    nothing to reply with. Go to **Settings → Modules → Consciousness** and add a provider.
+> 3. **Is server-runtime running?** If this service says "connected" in its logs you're fine.
+>    If it keeps reconnecting, start `pnpm -F @proj-airi/server-runtime start` first.
+> 4. **Quick smoke-test:** open **Settings → Developer → Chat** in stage-web and click
+>    **▶ Inject simulated response** — if the bubble appears there but not after a curl call,
+>    the issue is in the LLM provider or server-runtime connection, not the avatar itself.
 
 ## Endpoints
 
