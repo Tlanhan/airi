@@ -232,6 +232,41 @@ See the [Current Progress](#current-progress) section below for full details. In
 
 PRs are welcome to contribute your customizations back to the main repository! For any questions, feel free to join our [Discord](https://discord.gg/TgQ3Cu2F7A) community.
 
+### Is real-time conversation limited to a chat dialog, or can it run background tasks and proactively notify users?
+
+**It's not limited to a dialog box.** アイリ uses a WebSocket-based event bus that connects all modules and supports full bidirectional communication, meaning it **can run tasks in the background and proactively push messages to users without waiting for them to speak first**.
+
+Specifically:
+
+- **Proactive message sending (no user prompt needed)**: The Discord adapter continuously listens for `output:gen-ai:chat:message` events. Whenever アイリ's internals produce output — for example, finishing a game task or reacting to an in-game event — the adapter immediately sends a message to the channel, entirely without any prior user message.
+- **Periodic background loops**: The Telegram bot has a built-in autonomous periodic loop (`loopPeriodic()`). Even with no new incoming messages, it regularly scans all known chats, reads unread messages, and independently generates and sends replies.
+- **Module health notifications**: The Server Runtime monitors the heartbeat of every connected module. When a module goes offline or becomes unhealthy, it automatically broadcasts a health-status event to all authenticated clients.
+
+In short, アイリ's communication model is not a "request–response" chat box — it is an event-driven real-time pipeline where any module can push messages to other modules or to users at any moment.
+
+### How is autonomous game playing implemented?
+
+Taking Minecraft as an example, アイリ uses a **four-layer cognitive architecture** that lets the LLM perceive, reason about, and act within the game world autonomously:
+
+```
+Perception layer:  raw game events → structured signals
+        ↓
+Reflex layer:      fast rule-based reactions
+        ↓
+Conscious layer:   LLM reasoning & planning
+        ↓
+Action layer:      calls game APIs to execute moves
+```
+
+**Technical details:**
+
+- **Game connection**: Uses the [Mineflayer](https://github.com/PrismarineJS/mineflayer) library to connect to a Minecraft server, with plugins for pathfinding (`mineflayer-pathfinder`), combat (`mineflayer-pvp`), auto-eating (`mineflayer-auto-eat`), and more.
+- **Perception layer**: Subscribes to raw Mineflayer events (player movement, block changes, entity state, chat messages, etc.) and passes them through a rule engine that converts them into higher-level signals (e.g. "player nearby", "health dropping") fed into the Conscious layer.
+- **Conscious layer (LLM reasoning)**: The core is an event-priority queue. Direct player chat has the highest priority (0), followed by game-perception events (1), then action feedback (2). Each turn, the LLM receives the current game state, conversation history, and a list of available actions, and outputs the next action to take.
+- **Action layer**: The LLM's output is a structured action command (e.g. `goToPlayer`, `collectBlock`, `chat`). The action registry validates the parameters before calling the corresponding Mineflayer API to actually execute the move.
+
+Factorio uses the same pattern, communicating with the game server via the [Factorio RCON API implementation](https://github.com/nekomeowww/factorio-rcon-api). See the [AIRI Factorio](https://github.com/moeru-ai/airi-factorio) sub-project for details.
+
 ## Current Progress
 
 Capable of

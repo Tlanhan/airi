@@ -224,6 +224,41 @@ Project AIRI 是一个开源的 AI VTuber（虚拟 YouTuber）平台，深受 [N
 
 欢迎将你的魔改以 PR 的形式贡献回主仓库！有任何问题，欢迎加入我们的 [Discord](https://discord.gg/TgQ3Cu2F7A) 社区交流。
 
+### 与用户进行实时对话，是只能通过对话框吗？还是可以后台运行功能并主动通知用户？
+
+**不仅限于对话框。** アイリ 使用基于 WebSocket 的事件总线连接所有模块，支持双向通信，因此**可以在后台执行任务并主动向用户发送消息**。
+
+具体来说：
+
+- **主动推送消息（无需等待用户发言）**：Discord 适配器会持续监听 `output:gen-ai:chat:message` 事件；一旦 アイリ 内部产生输出（例如完成游戏任务、触发某个事件），Discord 适配器会直接向频道发送消息，完全不需要用户先说话。
+- **后台定时循环**：Telegram bot 内置了周期性自主循环（`loopPeriodic()`），即使没有新消息，也会定期扫描各聊天窗口、读取未读消息、自主生成并发出回复。
+- **模块健康通知**：Server Runtime 会监控所有连接模块的心跳，当某个模块离线或异常时，会自动向所有已认证的客户端广播健康状态事件。
+
+简而言之，アイリ 的通信模型不是"请求-响应"式的聊天框，而是一个事件驱动的实时管道——任何模块都可以在任意时刻主动向其他模块或用户推送消息。
+
+### 自主玩游戏是怎么实现的？
+
+以 Minecraft 为例，アイリ 使用了一套**四层认知架构**，让 LLM 能够在游戏世界中自主感知、决策、行动：
+
+```
+感知层（Perception）：原始游戏事件 → 结构化信号
+    ↓
+反射层（Reflex）：基于规则的快速反应
+    ↓
+意识层（Conscious）：LLM 推理与规划
+    ↓
+行动层（Action）：调用游戏 API 执行操作
+```
+
+**技术实现细节：**
+
+- **游戏接入**：使用 [Mineflayer](https://github.com/PrismarineJS/mineflayer) 库连接 Minecraft 服务器，并加载寻路（`mineflayer-pathfinder`）、战斗（`mineflayer-pvp`）、自动进食（`mineflayer-auto-eat`）等插件。
+- **感知层**：订阅 Mineflayer 的原始事件（玩家移动、方块变化、实体状态、聊天消息等），通过规则引擎将其转化为更高层次的"信号"（如"玩家在附近""血量下降"）传入意识层。
+- **意识层（LLM 推理）**：核心是一个事件优先级队列。玩家直接发言优先级最高（0），其次是游戏感知事件（1），其次是行动反馈（2）。每一轮，LLM 接收当前游戏状态 + 历史消息 + 可用行动列表，输出下一步行动指令。
+- **行动层**：LLM 输出结构化的行动（如 `goToPlayer`、`collectBlock`、`chat`），由行动注册表校验参数后，调用对应的 Mineflayer API 实际执行。
+
+Factorio 的实现思路相同，通过 [RCON API 实现](https://github.com/nekomeowww/factorio-rcon-api) 与游戏服务器通信。详见 [AIRI Factorio](https://github.com/moeru-ai/airi-factorio) 子项目。
+
 ## 当前进度
 
 目前已经能做到：
