@@ -1,4 +1,4 @@
-# @proj-airi/openclaw-bot
+# @proj-airi/openclaw
 
 Bridges [OpenClaw](https://github.com/openclaw/openclaw) message notifications to the AIRI avatar stage.
 
@@ -8,7 +8,7 @@ Bridges [OpenClaw](https://github.com/openclaw/openclaw) message notifications t
 OpenClaw (any channel)
   │  POST /webhook
   ▼
-openclaw-bot (this service, HTTP :6122)
+openclaw (this service, HTTP :6122)
   │  input:text  (WebSocket)
   ▼
 AIRI server-runtime (:6121)
@@ -42,7 +42,7 @@ There is **no Discord/Telegram required** as a middleware. OpenClaw talks direct
 > | 1 | **server-runtime** | `pnpm -F @proj-airi/server-runtime start` | WebSocket hub that routes events |
 > | 2 | **stage-web** (or tamagotchi) | `pnpm -F @proj-airi/stage-web dev` | Avatar UI that shows the chat bubble |
 > | 3 | **LLM provider** | Configured in stage-web Settings | Generates the avatar's reply |
-> | 4 | **openclaw-bot** (this service) | `pnpm start` | Bridges OpenClaw webhooks to the server |
+> | 4 | **openclaw** (this service) | `pnpm -F @proj-airi/openclaw dev` | Bridges OpenClaw webhooks to the server |
 
 ### 1. Start the AIRI server
 
