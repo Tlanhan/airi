@@ -87,11 +87,32 @@ Only `text` is required. `sender`, `platform`, and `channelId` are optional enri
 
 Alternatively, test immediately with `curl`:
 
+**Linux / macOS (bash)**
+
 ```bash
 curl -X POST http://localhost:6122/webhook \
   -H 'Content-Type: application/json' \
   -d '{"text":"Hello AIRI! You got a WhatsApp message.","sender":{"name":"Alice"},"platform":"whatsapp","channelId":"chat1"}'
 ```
+
+**Windows — Command Prompt (`cmd.exe`)**
+
+```cmd
+curl -X POST http://localhost:6122/webhook ^
+  -H "Content-Type: application/json" ^
+  -d "{\"text\":\"Hello AIRI!\",\"sender\":{\"name\":\"Alice\"},\"platform\":\"whatsapp\",\"channelId\":\"chat1\"}"
+```
+
+**Windows — PowerShell** (use `curl.exe` to call real curl, not the `Invoke-WebRequest` alias)
+
+```powershell
+curl.exe -X POST http://localhost:6122/webhook `
+  -H "Content-Type: application/json" `
+  -d '{"text":"Hello AIRI!","sender":{"name":"Alice"},"platform":"whatsapp","channelId":"chat1"}'
+```
+
+> **Tip**: if you get `{"error":"Invalid JSON"}`, check that your shell is not wrapping the body with extra quotes.  
+> Use `GET /health` first to confirm the service is up: `curl http://localhost:6122/health`
 
 You should see アイリ's avatar display a chat bubble popup in response.
 

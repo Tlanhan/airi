@@ -106,12 +106,23 @@ export class OpenClawAdapter {
       return
     }
 
-    const body = await readBody(req)
+    const rawBody = await readBody(req)
+    // Strip UTF-8 BOM that some HTTP clients (e.g. certain Windows tools) prepend,
+    // then trim surrounding whitespace so JSON.parse doesn't choke on stray newlines.
+    const body = rawBody.replace(/^\uFEFF/, '').trim()
+
+    if (!body) {
+      res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Empty request body' }))
+      return
+    }
+
     let payload: OpenClawWebhookPayload
     try {
       payload = JSON.parse(body) as OpenClawWebhookPayload
     }
-    catch {
+    catch (err) {
+      // Log a short prefix of the body to aid debugging without leaking sensitive payload data.
+      log.withError(err as Error).error(`Failed to parse JSON body (first 80 chars): ${body.slice(0, 80)}`)
       res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Invalid JSON' }))
       return
     }
