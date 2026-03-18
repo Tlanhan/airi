@@ -11,8 +11,8 @@
  *  - The AIRI project must already be running:
  *      pnpm -F @proj-airi/server-runtime dev   (port 6121)
  *      pnpm -F @proj-airi/stage-web dev         (browser UI)
- *    Optionally:
- *      pnpm -F @proj-airi/openclaw dev          (port 6122, for --webhook mode)
+ *    Webhook mode additionally requires:
+ *      pnpm -F @proj-airi/openclaw dev          (port 6122)
  *
  *  - An LLM provider and model must be configured in stage-web:
  *      Open stage-web in the browser → Settings → Modules → Consciousness
@@ -35,6 +35,23 @@
  *
  *  # Show help:
  *    node scripts/simulate-openclaw-message.mjs --help
+ *
+ * Why webhook mode also opens a WebSocket
+ * ----------------------------------------
+ *  The LLM response does NOT come back through the HTTP webhook POST — it
+ *  arrives as an `output:gen-ai:chat:message` WebSocket event emitted by
+ *  stage-web back through server-runtime.
+ *
+ *  The real @proj-airi/openclaw service works the same way:
+ *    1. It exposes an HTTP webhook to *receive* messages from OpenClaw.
+ *    2. It maintains a *persistent* WebSocket connection to server-runtime to
+ *       both *forward* those messages to stage-web and *receive* LLM responses.
+ *
+ *  Webhook mode in this script therefore:
+ *    1. Opens a WebSocket to server-runtime (to listen for responses).
+ *    2. Waits until the connection is authenticated and registered.
+ *    3. POSTs the message to the openclaw HTTP webhook.
+ *    4. Waits for `output:gen-ai:chat:message` on the WebSocket and prints it.
  *
  * What to observe
  * ---------------
@@ -124,8 +141,17 @@ USAGE
   node scripts/simulate-openclaw-message.mjs [OPTIONS]
 
 MODES
-  (default)  Webhook mode — POST to the OpenClaw service webhook
-  --direct   Direct WebSocket mode — connect straight to server-runtime
+  (default)  Webhook mode — POST to the OpenClaw webhook AND listen for the
+             LLM response on the server-runtime WebSocket (mirrors how the real
+             openclaw service works: HTTP in, WebSocket out).
+  --direct   Direct WebSocket mode — connect straight to server-runtime (no
+             openclaw service needed).
+
+WHY BOTH MODES NEED A WEBSOCKET
+  The LLM response does NOT come back over HTTP — it arrives as an
+  output:gen-ai:chat:message WebSocket event from server-runtime.
+  Webhook mode therefore opens a WebSocket listener BEFORE posting so it can
+  capture the response.  The real openclaw service does the same thing.
 
 OPTIONS
   --text <msg>           Message text to send  (default: greeting in Chinese)
@@ -134,8 +160,10 @@ OPTIONS
   --platform <name>      Platform tag          (default: test)
   --channel <id>         Channel/chat ID       (default: test-channel-001)
 
-  Webhook mode only:
+  Webhook mode:
   --webhook-url <url>    Webhook URL           (default: http://localhost:6122/webhook)
+  --ws-url <url>         server-runtime WS URL (default: ws://localhost:6121/ws)
+  --token <token>        Auth token for server-runtime (if required)
 
   Direct WebSocket mode only:
   --ws-url <url>         Server-runtime WS URL (default: ws://localhost:6121/ws)
@@ -196,9 +224,26 @@ function colorBold(s) { return `\x1B[1m${s}\x1B[0m` }
 // ---------------------------------------------------------------------------
 // Mode 1: Webhook
 // ---------------------------------------------------------------------------
+//
+// WHY webhook mode also opens a WebSocket
+// ----------------------------------------
+// The LLM response does NOT come back through the HTTP POST — it arrives as an
+// `output:gen-ai:chat:message` WebSocket event emitted by stage-web back through
+// server-runtime.  The real `@proj-airi/openclaw` service works the same way:
+//   1. It exposes an HTTP webhook to *receive* messages from OpenClaw.
+//   2. It maintains a *persistent* WebSocket connection to server-runtime so it
+//      can *send* those messages to stage-web AND *receive* the LLM responses.
+//
+// Without that second connection the script would just fire-and-forget —
+// you'd see `input:text` in the stage-web WebSocket Inspector (Incoming) but
+// never `output:gen-ai:chat:message` (Outgoing) in the script's console.
+//
+// Solution: open the server-runtime WebSocket BEFORE posting so there's no
+// race condition, POST the message to openclaw, then wait for the response.
 async function runWebhookMode(opts) {
-  console.log(colorBold('\n📨  Webhook mode'))
-  console.log(`   URL     : ${colorCyan(opts.webhookUrl)}`)
+  console.log(colorBold('\n📨  Webhook mode (with response listener)'))
+  console.log(`   Webhook : ${colorCyan(opts.webhookUrl)}`)
+  console.log(`   WS URL  : ${colorCyan(opts.wsUrl)}`)
   console.log(`   Message : ${colorYellow(opts.text)}`)
   console.log(`   Sender  : ${opts.sender.name} (${opts.sender.id})`)
   console.log(`   Platform: ${opts.platform} / channel: ${opts.channelId}\n`)
@@ -210,38 +255,147 @@ async function runWebhookMode(opts) {
     channelId: opts.channelId,
   })
 
-  let res
-  try {
-    res = await fetch(opts.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    })
-  }
-  catch (err) {
-    console.error(colorRed(`✗  Could not reach ${opts.webhookUrl}`))
-    console.error(`   ${err.message}`)
-    console.error(`\n   Tip: Make sure the OpenClaw service is running:`)
-    console.error(`     pnpm -F @proj-airi/openclaw dev`)
-    console.error(`   Or use --direct to bypass it and talk to server-runtime directly.\n`)
-    process.exit(1)
-  }
+  const instanceId = `sim-webhook-${Date.now().toString(36)}`
 
-  const responseText = await res.text()
-  if (res.ok) {
-    console.log(colorGreen(`✓  Webhook accepted (HTTP ${res.status})`))
-    console.log(`   Response: ${responseText}`)
-    console.log()
-    console.log(colorBold('👀  Now watch the avatar in the browser!'))
-    console.log(`   The avatar should receive the message through the server-runtime`)
-    console.log(`   and display the LLM response as a ChatBubble overlay above it.`)
-    console.log()
-  }
-  else {
-    console.error(colorRed(`✗  Webhook returned HTTP ${res.status}`))
-    console.error(`   Response: ${responseText}`)
-    process.exit(1)
-  }
+  return new Promise((resolve, reject) => {
+    let ws
+    try {
+      // NOTICE: Uses Node.js 22+ native WebSocket (available as a global via globalThis).
+      // No `ws` package dependency is needed — this keeps the script zero-dependency so it
+      // runs with just `node scripts/simulate-openclaw-message.mjs` without any install step.
+      // Reference: https://nodejs.org/en/blog/announcements/v22-release-announce#websocket
+      ws = new globalThis.WebSocket(opts.wsUrl)
+    }
+    catch {
+      console.error(colorRed('✗  WebSocket constructor not available.'))
+      console.error('   Requires Node.js 22+. Current version: ' + process.version)
+      process.exit(1)
+    }
+
+    const timeout = setTimeout(() => {
+      ws.close()
+      reject(new Error(`Timed out after ${opts.timeoutMs / 1000}s waiting for LLM response`))
+    }, opts.timeoutMs)
+
+    let announced = false
+    let posted = false
+
+    async function postWebhook() {
+      let res
+      try {
+        res = await fetch(opts.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        })
+      }
+      catch (err) {
+        clearTimeout(timeout)
+        ws.close()
+        console.error(colorRed(`✗  Could not reach ${opts.webhookUrl}`))
+        console.error(`   ${err.message}`)
+        console.error(`\n   Tip: Make sure the OpenClaw service is running:`)
+        console.error(`     pnpm -F @proj-airi/openclaw dev`)
+        console.error(`   Or use --direct to bypass openclaw and talk to server-runtime directly.\n`)
+        reject(new Error(err.message))
+        return
+      }
+
+      const responseText = await res.text()
+      if (res.ok) {
+        console.log(colorGreen(`✓  Webhook accepted (HTTP ${res.status}): ${responseText}`))
+        console.log(`   Waiting for LLM response on WebSocket (timeout: ${opts.timeoutMs / 1000}s)...`)
+        console.log()
+      }
+      else {
+        clearTimeout(timeout)
+        ws.close()
+        console.error(colorRed(`✗  Webhook returned HTTP ${res.status}`))
+        console.error(`   Response: ${responseText}`)
+        reject(new Error(`Webhook HTTP ${res.status}`))
+      }
+    }
+
+    ws.addEventListener('error', (event) => {
+      clearTimeout(timeout)
+      console.error(colorRed(`✗  WebSocket error: ${event.message ?? 'unknown'}`))
+      console.error(`\n   Tip: Make sure server-runtime is running:`)
+      console.error(`     pnpm -F @proj-airi/server-runtime dev\n`)
+      reject(new Error('WebSocket error'))
+    })
+
+    ws.addEventListener('close', () => {
+      clearTimeout(timeout)
+    })
+
+    ws.addEventListener('message', (event) => {
+      const msg = parseServerMessage(event.data)
+      if (!msg || !msg.type) return
+
+      switch (msg.type) {
+        case 'module:authenticated': {
+          if (msg.data?.authenticated && !announced) {
+            announced = true
+            console.log(colorGreen('✓  Connected to server-runtime & authenticated'))
+
+            // Mirror what the real openclaw service registers itself as
+            ws.send(buildEvent('module:announce', {
+              name: 'simulate-openclaw-webhook',
+              possibleEvents: ['output:gen-ai:chat:message'],
+              identity: {
+                kind: 'plugin',
+                plugin: { id: 'simulate-openclaw-webhook' },
+                id: instanceId,
+              },
+            }, instanceId))
+          }
+          break
+        }
+
+        case 'registry:modules:sync': {
+          // Once we're registered, post the webhook.  We defer this to after the
+          // registry sync so server-runtime has acknowledged our connection,
+          // guaranteeing our output:gen-ai:chat:message listener is active before
+          // the HTTP POST triggers stage-web to start processing.
+          if (announced && !posted) {
+            posted = true
+            postWebhook().catch(reject)
+          }
+          break
+        }
+
+        case 'output:gen-ai:chat:message': {
+          clearTimeout(timeout)
+          const payload = msg.data?.['gen-ai:chat']
+          const content = payload?.message?.content ?? payload?.message ?? '(no content)'
+          console.log(colorBold('🗨️   AIRI avatar response received:'))
+          console.log(colorGreen(`   ${content}`))
+          console.log()
+          console.log(colorBold('👀  Check the browser — the ChatBubble overlay should be visible above the avatar.'))
+          console.log()
+          ws.close()
+          resolve()
+          break
+        }
+
+        case 'error': {
+          const errMsg = msg.data?.message ?? 'unknown error'
+          console.error(colorRed(`✗  Server error: ${errMsg}`))
+          clearTimeout(timeout)
+          ws.close()
+          reject(new Error(errMsg))
+          break
+        }
+      }
+    })
+
+    ws.addEventListener('open', () => {
+      if (opts.token) {
+        ws.send(buildEvent('module:authenticate', { token: opts.token }, instanceId))
+      }
+      // No-token: server will send module:authenticated automatically, handled above
+    })
+  })
 }
 
 // ---------------------------------------------------------------------------

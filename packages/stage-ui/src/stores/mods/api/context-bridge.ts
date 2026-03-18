@@ -92,7 +92,7 @@ export const useContextBridgeStore = defineStore('mods:api:context-bridge', () =
           console.warn(
             '[context-bridge] Received input:text event but no LLM provider/model is configured. '
             + 'Go to Settings → Modules → Consciousness and select a provider and model before sending messages. '
-            + `(activeProvider=${JSON.stringify(activeProvider.value)}, activeModel=${JSON.stringify(activeModel.value)})`,
+            + `(activeProvider=${activeProvider.value ?? 'undefined'}, activeModel=${activeModel.value ?? 'undefined'})`,
           )
           return
         }
