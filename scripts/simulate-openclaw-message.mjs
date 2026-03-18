@@ -69,10 +69,25 @@
  * -------------------------------------------------
  *  If the script prints a timeout error and you see only "Incoming" events in
  *  the stage-web WebSocket Inspector (no "Outgoing" output:gen-ai:chat:complete),
- *  the most common cause is that no LLM provider or model has been configured:
- *    Open stage-web → Settings → Modules → Consciousness → select a provider and model.
- *  After configuring, re-run the script.
- *  You can also check the browser console for a "[context-bridge]" warning.
+ *  work through this checklist:
+ *
+ *  1. LLM not configured:
+ *       Open stage-web → Settings → Modules → Consciousness → select a provider and model.
+ *       Confirm it works by sending a message from the regular chat UI first.
+ *
+ *  2. LLM is slow (local models can take >30s for a first response):
+ *       The default timeout is now 120s. Pass --timeout 180 for even slower models.
+ *
+ *  3. stage-web opened via plain HTTP on a non-localhost address
+ *     (e.g. http://192.168.x.x:port from another device on the network):
+ *       The Web Locks API requires a secure context (HTTPS or localhost).
+ *       On plain HTTP the API is unavailable and the response path silently fails.
+ *       Solution: access stage-web via https:// or http://localhost.
+ *
+ *  4. Open the browser DevTools console while stage-web is running and look for:
+ *       "[context-bridge] ingesting input:text …"  — ingest started
+ *       "[context-bridge] input:text ingest completed"  — ingest finished
+ *       Any "[context-bridge]" error or warning lines explain the failure.
  */
 
 import { argv } from 'node:process'
@@ -91,7 +106,7 @@ function parseArgs(args) {
     webhookUrl: 'http://localhost:6122/webhook',
     wsUrl: 'ws://localhost:6121/ws',
     token: undefined,
-    timeoutMs: 30_000,
+    timeoutMs: 120_000,
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -130,7 +145,7 @@ function parseArgs(args) {
         break
       case '--timeout':
         // User provides seconds; convert to milliseconds for internal use.
-        result.timeoutMs = Number.parseInt(args[++i] ?? '30', 10) * 1_000
+        result.timeoutMs = Number.parseInt(args[++i] ?? '120', 10) * 1_000
         break
     }
   }
@@ -179,7 +194,7 @@ OPTIONS
   --ws-url <url>         Server-runtime WS URL (default: ws://localhost:6121/ws)
   --token <token>        Auth token            (if server requires one)
 
-  --timeout <seconds>    Response wait timeout (default: 30)
+  --timeout <seconds>    Response wait timeout (default: 120)
   --help, -h             Show this help
 `)
 }

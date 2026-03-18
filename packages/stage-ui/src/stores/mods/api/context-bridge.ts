@@ -135,8 +135,14 @@ export const useContextBridgeStore = defineStore('mods:api:context-bridge', () =
         // - https://chromestatus.com/feature/6265472244514816
         // - https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker
         // - https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
-        navigator.locks.request('context-bridge:event:input:text', async () => {
+        //
+        // NOTICE: Web Locks API requires a secure context (HTTPS or localhost). When stage-web is accessed via
+        // a plain HTTP URL (e.g., http://192.168.x.x:port from another device on the network), navigator.locks
+        // is undefined and calling it throws a TypeError that gets silently swallowed inside the async handler.
+        // We guard against this by checking availability and falling back to direct ingest when locks are absent.
+        const doIngest = async () => {
           try {
+            console.debug('[context-bridge] ingesting input:text', { messageText: messageText.slice(0, 60), targetSessionId, model: activeModel.value })
             await chatOrchestrator.ingest(messageText, {
               model: activeModel.value,
               chatProvider,
@@ -151,11 +157,29 @@ export const useContextBridgeStore = defineStore('mods:api:context-bridge', () =
                 },
               },
             }, targetSessionId)
+            console.debug('[context-bridge] input:text ingest completed successfully')
           }
           catch (err) {
-            console.error('Error ingesting text input via context bridge:', err)
+            console.error('[context-bridge] error ingesting text input via context bridge:', err)
           }
-        })
+        }
+
+        // Use Web Locks for cross-tab coordination when available (secure context only).
+        // Fall back to direct ingest if the API is unsupported or the lock request fails.
+        //
+        // NOTICE: doIngest always resolves (never throws — errors are caught internally).
+        // Therefore navigator.locks.request() only rejects for lock-acquisition failures
+        // (e.g. lock manager unavailable, AbortError), not for callback errors.
+        // The fallback inside .catch() will never cause double-execution of doIngest.
+        if (typeof navigator !== 'undefined' && navigator.locks) {
+          navigator.locks.request('context-bridge:event:input:text', doIngest).catch((err) => {
+            console.warn('[context-bridge] navigator.locks.request failed, falling back to direct ingest:', err)
+            void doIngest()
+          })
+        }
+        else {
+          void doIngest()
+        }
       }))
 
       disposeHookFns.value.push(

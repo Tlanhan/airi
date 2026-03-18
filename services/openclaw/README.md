@@ -225,7 +225,7 @@ Expected output:
 
 ✓  Connected & authenticated
 ✓  input:text event sent
-   Waiting for AIRI response (timeout: 30s)...
+   Waiting for AIRI response (timeout: 120s)...
 
 🗨️   AIRI avatar response received:
    我可以陪你聊天呀，也可以帮你做很多事情。...
@@ -252,10 +252,12 @@ node scripts/simulate-openclaw-message.mjs --webhook-url http://localhost:6122/w
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| `Timed out after 30s` | No LLM provider configured | Open stage-web → Settings → Modules → Consciousness and select a provider + model |
+| `Timed out after 120s` | No LLM provider configured | Open stage-web → Settings → Modules → Consciousness and select a provider + model |
+| `Timed out after 120s` | LLM is very slow | Pass `--timeout 300` for a larger budget |
 | `Error: connect ECONNREFUSED` | server-runtime not running | `pnpm -F @proj-airi/server-runtime dev` |
 | Webhook: `fetch failed` on POST | openclaw service not running | `pnpm -F @proj-airi/openclaw dev` |
-| `input:text` visible in WebSocket Inspector but no `output:gen-ai:chat:complete` | LLM provider not configured or API key invalid | Check the provider settings and try the direct mode first |
+| `input:text` visible as **Incoming** in WebSocket Inspector but no **Outgoing** `output:gen-ai:chat:complete` | LLM not configured, or stage-web served over plain HTTP on a non-localhost address | 1. Verify LLM in Settings → Modules → Consciousness. 2. If accessing stage-web via `http://192.168.x.x:port`, the browser's Web Locks API is unavailable (requires HTTPS or localhost) — use `http://localhost:port` instead. 3. Open the browser DevTools console and look for `[context-bridge]` log lines to pinpoint the failure. |
+| Browser console shows `[context-bridge] navigator.locks.request failed` | stage-web not served over a secure context | Access stage-web via `http://localhost:port` or set up HTTPS |
 
 Show all options:
 
