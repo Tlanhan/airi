@@ -14,7 +14,8 @@ openclaw (this service, HTTP :6122)
 AIRI server-runtime (:6121)
   │  LLM reasoning
   ▼
-output:gen-ai:chat:message
+output:gen-ai:chat:complete   ← definitive final response (always emitted)
+output:gen-ai:chat:message    ← per-chunk during streaming (may not fire)
   │
   ▼
 AIRI stage-web / stage-tamagotchi
@@ -28,7 +29,10 @@ This service is an **adapter** — the same pattern used by `services/discord-bo
 1. It starts a lightweight HTTP server that listens for incoming `POST /webhook` calls from OpenClaw.
 2. Each webhook call is wrapped into an `input:text` event and sent to the AIRI WebSocket server (`ws://localhost:6121/ws`) via `@proj-airi/server-sdk`.
 3. AIRI's LLM processes the message and generates a response.
-4. The response (`output:gen-ai:chat:message`) is displayed as a chat bubble on the AIRI avatar stage — that's the popup the user sees.
+4. Two events are emitted back through server-runtime:
+   - `output:gen-ai:chat:complete` — the definitive final response; **always emitted** once the full LLM turn finishes.
+   - `output:gen-ai:chat:message` — one event per streaming chunk; may not fire for non-streaming providers.
+5. The response is displayed as a chat bubble on the AIRI avatar stage — that's the popup the user sees.
 
 There is **no Discord/Telegram required** as a middleware. OpenClaw talks directly to this service, which talks directly to AIRI.
 
@@ -165,14 +169,96 @@ You should see アイリ's avatar display a chat bubble popup in response.
 
 - Each `(platform, channelId)` pair gets its own AIRI session (`openclaw-<platform>-<channelId>`), so conversations on different channels are isolated.
 - The `messagePrefix` injected into the AIRI prompt tells the LLM who is speaking and from which platform.
-- The `contextUpdates` array carries structured OpenClaw metadata through the AIRI pipeline. It is available in the `output:gen-ai:chat:message` event under `event.data['gen-ai:chat'].input.data.openclaw` for any future relay logic.
+- The `contextUpdates` array carries structured OpenClaw metadata through the AIRI pipeline. It is available in both `output:gen-ai:chat:complete` and `output:gen-ai:chat:message` events under `event.data['gen-ai:chat'].input.data.openclaw` for any future relay logic.
 
 ## Extending
 
-To send AIRI's response *back* through OpenClaw, listen for `output:gen-ai:chat:message` in the adapter and use OpenClaw's CLI or REST API to reply. The event data carries the original input context (including the `openclaw` metadata you sent) under `event.data['gen-ai:chat'].input.data.openclaw`:
+To send AIRI's response *back* through OpenClaw, listen for `output:gen-ai:chat:complete` in the adapter and use OpenClaw's CLI or REST API to reply. The event carries the complete assistant message at `event.data.message.content`, and the original input context (including the `openclaw` metadata you sent) is available under `event.data['gen-ai:chat'].input.data.openclaw`:
 
 ```bash
 openclaw message send --to <channelId> --message "<airi-response>"
 ```
 
 See `src/adapters/airi-adapter.ts` for the `setupAiriEventHandlers` method where this can be added.
+
+---
+
+## Testing with the simulation script
+
+The repository ships a **zero-dependency** Node.js script that lets you send a test message and see AIRI's response — no OpenClaw installation required. It has two modes:
+
+### Prerequisites
+
+Before running the script, ensure all required services are up:
+
+| # | Service | Command | Port |
+|---|---------|---------|------|
+| 1 | **server-runtime** | `pnpm -F @proj-airi/server-runtime dev` | 6121 |
+| 2 | **stage-web** (open in browser) | `pnpm -F @proj-airi/stage-web dev` | 5173 |
+| 3 | **LLM provider** | Configured in stage-web Settings → Modules → Consciousness | — |
+| 4 | **openclaw** *(webhook mode only)* | `pnpm -F @proj-airi/openclaw dev` | 6122 |
+
+> **Important**: Without an LLM provider configured in stage-web, messages are accepted but never answered — you will see `input:text` in the WebSocket Inspector but no `output:gen-ai:chat:complete` in response.
+
+### Mode 1 — Direct (recommended for quick tests)
+
+This mode sends the message straight to server-runtime via WebSocket, bypassing the openclaw HTTP layer. Only services 1–3 above are needed.
+
+```bash
+# Default message (Chinese greeting):
+node scripts/simulate-openclaw-message.mjs --direct
+
+# Custom message:
+node scripts/simulate-openclaw-message.mjs --direct --text "你能做些什么？"
+
+# With auth token (if server-runtime requires one):
+node scripts/simulate-openclaw-message.mjs --direct --token mySecret
+```
+
+Expected output:
+
+```
+🔌  Direct WebSocket mode
+   URL     : ws://localhost:6121/ws
+   Message : 你好！请简单介绍一下你自己。
+   ...
+
+✓  Connected & authenticated
+✓  input:text event sent
+   Waiting for AIRI response (timeout: 30s)...
+
+🗨️   AIRI avatar response received:
+   我可以陪你聊天呀，也可以帮你做很多事情。...
+
+👀  Check the browser — the ChatBubble overlay should be visible above the avatar.
+```
+
+### Mode 2 — Webhook (end-to-end test)
+
+This mode POST to the openclaw HTTP webhook, exactly as OpenClaw itself would. All four services above must be running.
+
+```bash
+# Default message:
+node scripts/simulate-openclaw-message.mjs
+
+# Custom message:
+node scripts/simulate-openclaw-message.mjs --text "你好！"
+
+# Custom webhook URL:
+node scripts/simulate-openclaw-message.mjs --webhook-url http://localhost:6122/webhook --text "Hello!"
+```
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `Timed out after 30s` | No LLM provider configured | Open stage-web → Settings → Modules → Consciousness and select a provider + model |
+| `Error: connect ECONNREFUSED` | server-runtime not running | `pnpm -F @proj-airi/server-runtime dev` |
+| Webhook: `fetch failed` on POST | openclaw service not running | `pnpm -F @proj-airi/openclaw dev` |
+| `input:text` visible in WebSocket Inspector but no `output:gen-ai:chat:complete` | LLM provider not configured or API key invalid | Check the provider settings and try the direct mode first |
+
+Show all options:
+
+```bash
+node scripts/simulate-openclaw-message.mjs --help
+```

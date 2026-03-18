@@ -19,7 +19,7 @@
  *      Select a provider (e.g. Ollama, OpenAI) and a model.
  *      Without this, stage-web silently drops incoming messages — you will see
  *      "input:text" in the WebSocket Inspector (Incoming) but no
- *      "output:gen-ai:chat:message" (Outgoing).
+ *      "output:gen-ai:chat:complete" (Outgoing).
  *
  * Usage
  * -----
