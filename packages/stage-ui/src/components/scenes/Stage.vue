@@ -414,6 +414,14 @@ async function setupLipSync() {
   if (lipSyncStarted.value)
     return
 
+  // AudioWorklet requires a secure context (HTTPS or localhost). In non-secure
+  // environments (e.g. HTTP served via an IP address) audioContext.audioWorklet is
+  // undefined, so skip lip sync instead of letting wLipSync throw a cryptic error.
+  if (!audioContext.audioWorklet) {
+    console.warn('[Stage] Live2D lip sync disabled: AudioWorklet requires a secure context (HTTPS or localhost).')
+    return
+  }
+
   try {
     const lipSync = await createLive2DLipSync(audioContext, wlipsyncProfile as Profile, live2dLipSyncOptions)
     live2dLipSync.value = lipSync

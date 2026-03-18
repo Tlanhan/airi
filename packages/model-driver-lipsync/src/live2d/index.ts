@@ -67,12 +67,36 @@ export interface Live2DLipSyncOptions {
  * - Compute AEIOUS weights from the worklet
  * - Remap to AEIOU
  * - Scale by volume to derive a mouth-open value
+ *
+ * NOTICE: AudioWorklet (used by wLipSync internally) requires a **secure context**
+ * (HTTPS or localhost). If `audioContext.audioWorklet` is undefined the function
+ * throws a descriptive error so callers can handle it gracefully instead of seeing
+ * the cryptic "Cannot read properties of undefined (reading 'addModule')".
  */
 export async function createLive2DLipSync(
   audioContext: AudioContext,
   profile: Profile,
   options: Live2DLipSyncOptions = {},
 ): Promise<Live2DLipSync> {
+  // NOTICE: AudioWorklet is only exposed to "secure contexts" by the browser.
+  // A secure context is HTTPS or http://localhost. If the app is served over plain
+  // HTTP from an IP address (e.g. http://192.168.x.x:5173, common during LAN
+  // testing), browsers hide audioWorklet entirely — its value is undefined instead
+  // of an AudioWorklet instance. wLipSync calls audioContext.audioWorklet.addModule()
+  // internally, which would throw the cryptic:
+  //   "TypeError: Cannot read properties of undefined (reading 'addModule')"
+  // We detect this upfront and throw a human-readable error so callers can handle
+  // it gracefully (e.g. disabling lip sync rather than crashing).
+  // See: https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts
+  if (!audioContext.audioWorklet) {
+    throw new Error(
+      'AudioWorklet is not available on this AudioContext. '
+      + 'Live2D lip sync requires a secure browsing context (HTTPS or localhost). '
+      + 'If you are accessing the app via an IP address over HTTP, '
+      + 'please use localhost or serve it over HTTPS instead.',
+    )
+  }
+
   const node = await createWLipSyncNode(audioContext, profile)
 
   const cap = options.cap ?? 0.7
