@@ -39,8 +39,12 @@
  * Why webhook mode also opens a WebSocket
  * ----------------------------------------
  *  The LLM response does NOT come back through the HTTP webhook POST — it
- *  arrives as an `output:gen-ai:chat:message` WebSocket event emitted by
- *  stage-web back through server-runtime.
+ *  arrives as a WebSocket event emitted by stage-web back through server-runtime.
+ *  There are two relevant events:
+ *    - `output:gen-ai:chat:message`  — emitted for each streaming chunk
+ *      (may not fire at all for non-streaming providers).
+ *    - `output:gen-ai:chat:complete` — emitted once the full LLM turn is done
+ *      (always emitted regardless of streaming mode; this is the definitive response).
  *
  *  The real @proj-airi/openclaw service works the same way:
  *    1. It exposes an HTTP webhook to *receive* messages from OpenClaw.
@@ -51,7 +55,8 @@
  *    1. Opens a WebSocket to server-runtime (to listen for responses).
  *    2. Waits until the connection is authenticated and registered.
  *    3. POSTs the message to the openclaw HTTP webhook.
- *    4. Waits for `output:gen-ai:chat:message` on the WebSocket and prints it.
+ *    4. Waits for `output:gen-ai:chat:message` OR `output:gen-ai:chat:complete`
+ *       on the WebSocket and prints the first one that arrives.
  *
  * What to observe
  * ---------------
@@ -63,7 +68,7 @@
  * Troubleshooting — script times out / no response
  * -------------------------------------------------
  *  If the script prints a timeout error and you see only "Incoming" events in
- *  the stage-web WebSocket Inspector (no "Outgoing" output:gen-ai:chat:message),
+ *  the stage-web WebSocket Inspector (no "Outgoing" output:gen-ai:chat:complete),
  *  the most common cause is that no LLM provider or model has been configured:
  *    Open stage-web → Settings → Modules → Consciousness → select a provider and model.
  *  After configuring, re-run the script.
@@ -148,10 +153,15 @@ MODES
              openclaw service needed).
 
 WHY BOTH MODES NEED A WEBSOCKET
-  The LLM response does NOT come back over HTTP — it arrives as an
-  output:gen-ai:chat:message WebSocket event from server-runtime.
-  Webhook mode therefore opens a WebSocket listener BEFORE posting so it can
-  capture the response.  The real openclaw service does the same thing.
+  The LLM response does NOT come back over HTTP — it arrives as a WebSocket
+  event from server-runtime.  Two events carry the response:
+    output:gen-ai:chat:message   — one event per streaming chunk (may not fire
+                                   for non-streaming providers)
+    output:gen-ai:chat:complete  — fired once the full turn is done (always
+                                   emitted; this is the definitive final answer)
+  The script resolves as soon as either event arrives.
+  Webhook mode opens a WebSocket listener BEFORE posting so it cannot miss
+  any events.  The real openclaw service does the same thing.
 
 OPTIONS
   --text <msg>           Message text to send  (default: greeting in Chinese)
@@ -227,16 +237,19 @@ function colorBold(s) { return `\x1B[1m${s}\x1B[0m` }
 //
 // WHY webhook mode also opens a WebSocket
 // ----------------------------------------
-// The LLM response does NOT come back through the HTTP POST — it arrives as an
-// `output:gen-ai:chat:message` WebSocket event emitted by stage-web back through
-// server-runtime.  The real `@proj-airi/openclaw` service works the same way:
+// The LLM response does NOT come back through the HTTP POST — it arrives as a
+// WebSocket event emitted by stage-web back through server-runtime.
+// Two events carry the response:
+//   - `output:gen-ai:chat:message`  — one event per streaming chunk
+//   - `output:gen-ai:chat:complete` — fired once the full turn is done (always emitted)
+// The real `@proj-airi/openclaw` service works the same way:
 //   1. It exposes an HTTP webhook to *receive* messages from OpenClaw.
 //   2. It maintains a *persistent* WebSocket connection to server-runtime so it
 //      can *send* those messages to stage-web AND *receive* the LLM responses.
 //
 // Without that second connection the script would just fire-and-forget —
 // you'd see `input:text` in the stage-web WebSocket Inspector (Incoming) but
-// never `output:gen-ai:chat:message` (Outgoing) in the script's console.
+// never `output:gen-ai:chat:complete` (Outgoing) in the script's console.
 //
 // Solution: open the server-runtime WebSocket BEFORE posting so there's no
 // race condition, POST the message to openclaw, then wait for the response.
@@ -338,10 +351,13 @@ async function runWebhookMode(opts) {
             announced = true
             console.log(colorGreen('✓  Connected to server-runtime & authenticated'))
 
-            // Mirror what the real openclaw service registers itself as
+            // Mirror what the real openclaw service registers itself as.
+            // Both output:gen-ai:chat:message (per-chunk during streaming) and
+            // output:gen-ai:chat:complete (full turn result) must be listed so
+            // server-runtime routes either event to this connection.
             ws.send(buildEvent('module:announce', {
               name: 'simulate-openclaw-webhook',
-              possibleEvents: ['output:gen-ai:chat:message'],
+              possibleEvents: ['output:gen-ai:chat:message', 'output:gen-ai:chat:complete'],
               identity: {
                 kind: 'plugin',
                 plugin: { id: 'simulate-openclaw-webhook' },
@@ -355,7 +371,7 @@ async function runWebhookMode(opts) {
         case 'registry:modules:sync': {
           // Once we're registered, post the webhook.  We defer this to after the
           // registry sync so server-runtime has acknowledged our connection,
-          // guaranteeing our output:gen-ai:chat:message listener is active before
+          // guaranteeing our output:gen-ai:chat:* listener is active before
           // the HTTP POST triggers stage-web to start processing.
           if (announced && !posted) {
             posted = true
@@ -364,10 +380,30 @@ async function runWebhookMode(opts) {
           break
         }
 
+        // output:gen-ai:chat:message fires for each streaming chunk (may fire
+        // multiple times or not at all depending on the provider/model).
+        // The assistant response is at data.message.content; data['gen-ai:chat'].message
+        // holds the user (input) message and should not be used here.
         case 'output:gen-ai:chat:message': {
           clearTimeout(timeout)
-          const payload = msg.data?.['gen-ai:chat']
-          const content = payload?.message?.content ?? payload?.message ?? '(no content)'
+          const content = msg.data?.message?.content ?? '(no content)'
+          console.log(colorBold('🗨️   AIRI avatar response received (streaming chunk):'))
+          console.log(colorGreen(`   ${content}`))
+          console.log()
+          console.log(colorBold('👀  Check the browser — the ChatBubble overlay should be visible above the avatar.'))
+          console.log()
+          ws.close()
+          resolve()
+          break
+        }
+
+        // output:gen-ai:chat:complete fires once the full LLM turn is finished.
+        // This is the definitive final response — always emitted, even when
+        // output:gen-ai:chat:message is not (e.g. non-streaming providers).
+        // The assistant response is at data.message.content (same path as above).
+        case 'output:gen-ai:chat:complete': {
+          clearTimeout(timeout)
+          const content = msg.data?.message?.content ?? '(no content)'
           console.log(colorBold('🗨️   AIRI avatar response received:'))
           console.log(colorGreen(`   ${content}`))
           console.log()
@@ -455,10 +491,13 @@ async function runDirectMode(opts) {
             announced = true
             console.log(colorGreen('✓  Connected & authenticated'))
 
-            // Announce ourselves as the simulate-openclaw test module
+            // Announce ourselves as the simulate-openclaw test module.
+            // Both output:gen-ai:chat:message (per-chunk during streaming) and
+            // output:gen-ai:chat:complete (full turn result) must be listed so
+            // server-runtime routes either event to this connection.
             ws.send(buildEvent('module:announce', {
               name: 'simulate-openclaw',
-              possibleEvents: ['input:text', 'output:gen-ai:chat:message'],
+              possibleEvents: ['input:text', 'output:gen-ai:chat:message', 'output:gen-ai:chat:complete'],
               identity: {
                 kind: 'plugin',
                 plugin: { id: 'simulate-openclaw' },
@@ -508,10 +547,30 @@ async function runDirectMode(opts) {
           break
         }
 
+        // output:gen-ai:chat:message fires for each streaming chunk (may fire
+        // multiple times or not at all depending on the provider/model).
+        // The assistant response is at data.message.content; data['gen-ai:chat'].message
+        // holds the user (input) message and should not be used here.
         case 'output:gen-ai:chat:message': {
           clearTimeout(timeout)
-          const payload = msg.data?.['gen-ai:chat']
-          const content = payload?.message?.content ?? payload?.message ?? '(no content)'
+          const content = msg.data?.message?.content ?? '(no content)'
+          console.log(colorBold('🗨️   AIRI avatar response received (streaming chunk):'))
+          console.log(colorGreen(`   ${content}`))
+          console.log()
+          console.log(colorBold('👀  Check the browser — the ChatBubble overlay should be visible above the avatar.'))
+          console.log()
+          ws.close()
+          resolve()
+          break
+        }
+
+        // output:gen-ai:chat:complete fires once the full LLM turn is finished.
+        // This is the definitive final response — always emitted, even when
+        // output:gen-ai:chat:message is not (e.g. non-streaming providers).
+        // The assistant response is at data.message.content (same path as above).
+        case 'output:gen-ai:chat:complete': {
+          clearTimeout(timeout)
+          const content = msg.data?.message?.content ?? '(no content)'
           console.log(colorBold('🗨️   AIRI avatar response received:'))
           console.log(colorGreen(`   ${content}`))
           console.log()

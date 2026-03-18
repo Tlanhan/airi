@@ -69,6 +69,7 @@ export class OpenClawAdapter {
       possibleEvents: [
         'input:text',
         'output:gen-ai:chat:message',
+        'output:gen-ai:chat:complete',
       ],
       token: config.airiToken ?? env.AIRI_TOKEN,
       url: config.airiUrl ?? env.AIRI_URL ?? 'ws://localhost:6121/ws',
@@ -86,8 +87,18 @@ export class OpenClawAdapter {
   }
 
   private setupAiriEventHandlers(): void {
-    // Log AIRI responses (the avatar already shows them as chat bubbles)
+    // Log AIRI streaming chunks (may not fire for non-streaming providers).
+    // The assistant response is at event.data.message.content.
     this.airiClient.onEvent('output:gen-ai:chat:message', (event) => {
+      const message = (event.data as { message?: { content?: string } }).message
+      if (message?.content)
+        log.log('AIRI avatar response (streaming chunk):', message.content.slice(0, 120))
+    })
+
+    // Log the definitive final LLM response — always emitted once the full turn is done,
+    // even when output:gen-ai:chat:message is not (e.g. non-streaming providers).
+    // The assistant response is at event.data.message.content (same path as above).
+    this.airiClient.onEvent('output:gen-ai:chat:complete', (event) => {
       const message = (event.data as { message?: { content?: string } }).message
       if (message?.content)
         log.log('AIRI avatar response:', message.content.slice(0, 120))
