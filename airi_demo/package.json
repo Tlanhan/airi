@@ -1,0 +1,24 @@
+{
+  "name": "airi-webhook-demo",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AIRI 人偶 Webhook 通信最小可复用单元 — 可独立迁移到任意项目",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "start:server": "tsx src/server.ts",
+    "start:webhook": "tsx src/webhook-adapter.ts",
+    "simulate": "node scripts/simulate.mjs",
+    "simulate:direct": "node scripts/simulate.mjs --direct"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
+  }
+}
