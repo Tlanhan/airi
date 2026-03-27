@@ -198,6 +198,100 @@ This means that **アイリ is capable of running on modern browsers and devices
 >
 > **If you are interested, why not introduce yourself here? [Would like to join part of us to build AIRI?](https://github.com/moeru-ai/airi/discussions/33)**
 
+## Frequently Asked Questions (FAQ)
+
+### What kind of project is this?
+
+Project AIRI is an open-source AI VTuber (Virtual YouTuber) platform, heavily inspired by [Neuro-sama](https://www.youtube.com/@Neurosama). It provides a "soul container" that lets AI-driven virtual characters:
+
+- Engage in real-time conversations with users
+- Autonomously play games (Minecraft, Factorio, etc.)
+- Interact with fans via platforms like Discord and Telegram
+- Be presented as Live2D or VRM models with expressions, animations, and voice
+
+### What can it do?
+
+See the [Current Progress](#current-progress) section below for full details. In brief, アイリ can currently:
+
+- 🧠 **Brain**: Connect to various LLM providers (OpenAI, Claude, DeepSeek, etc.) for roleplay and conversation
+- 👂 **Ears**: Speech recognition (browser / Discord audio input)
+- 👄 **Mouth**: Speech synthesis (ElevenLabs and other TTS services)
+- 🎮 **Game Agent**: Autonomously play Minecraft and Factorio
+- 💬 **Chat Integration**: Real-time chatting in Telegram and Discord
+- 🧍 **Virtual Avatar**: VRM and Live2D model support with auto-blinking, gaze tracking, and other animations
+
+### Does it support customization / modding?
+
+**Absolutely!** Project AIRI is open-source under the [MIT license](./LICENSE). You are free to:
+
+- **Fork and modify**: Customize any part to your liking, including UI, character persona, and behavior logic
+- **Add new features**: The project has a WIP plugin system that will support even more flexible extensibility in the future
+- **Swap LLM providers**: 20+ LLM providers are supported, including local deployments via Ollama and vLLM
+- **Replace the character model**: Swap in your favorite VRM or Live2D model
+- **Integrate new games or platforms**: Use the existing Minecraft / Factorio agent implementations as a reference to connect other games or communication platforms
+
+PRs are welcome to contribute your customizations back to the main repository! For any questions, feel free to join our [Discord](https://discord.gg/TgQ3Cu2F7A) community.
+
+### Is real-time conversation limited to a chat dialog, or can it run background tasks and proactively notify users?
+
+**It's not limited to a dialog box.** アイリ uses a WebSocket-based event bus that connects all modules and supports full bidirectional communication, meaning it **can run tasks in the background and proactively push messages to users without waiting for them to speak first**.
+
+Specifically:
+
+- **Proactive message sending (no user prompt needed)**: The Discord adapter continuously listens for `output:gen-ai:chat:message` events. Whenever アイリ's internals produce output — for example, finishing a game task or reacting to an in-game event — the adapter immediately sends a message to the channel, entirely without any prior user message.
+- **Periodic background loops**: The Telegram bot has a built-in autonomous periodic loop (`loopPeriodic()`). Even with no new incoming messages, it regularly scans all known chats, reads unread messages, and independently generates and sends replies.
+- **Module health notifications**: The Server Runtime monitors the heartbeat of every connected module. When a module goes offline or becomes unhealthy, it automatically broadcasts a health-status event to all authenticated clients.
+
+In short, アイリ's communication model is not a "request–response" chat box — it is an event-driven real-time pipeline where any module can push messages to other modules or to users at any moment.
+
+### How is autonomous game playing implemented?
+
+Taking Minecraft as an example, アイリ uses a **four-layer cognitive architecture** that lets the LLM perceive, reason about, and act within the game world autonomously:
+
+```
+Perception layer:  raw game events → structured signals
+        ↓
+Reflex layer:      fast rule-based reactions
+        ↓
+Conscious layer:   LLM reasoning & planning
+        ↓
+Action layer:      calls game APIs to execute moves
+```
+
+**Technical details:**
+
+- **Game connection**: Uses the [Mineflayer](https://github.com/PrismarineJS/mineflayer) library to connect to a Minecraft server, with plugins for pathfinding (`mineflayer-pathfinder`), combat (`mineflayer-pvp`), auto-eating (`mineflayer-auto-eat`), and more.
+- **Perception layer**: Subscribes to raw Mineflayer events (player movement, block changes, entity state, chat messages, etc.) and passes them through a rule engine that converts them into higher-level signals (e.g. "player nearby", "health dropping") fed into the Conscious layer.
+- **Conscious layer (LLM reasoning)**: The core is an event-priority queue. Direct player chat has the highest priority (0), followed by game-perception events (1), then action feedback (2). Each turn, the LLM receives the current game state, conversation history, and a list of available actions, and outputs the next action to take.
+- **Action layer**: The LLM's output is a structured action command (e.g. `goToPlayer`, `collectBlock`, `chat`). The action registry validates the parameters before calling the corresponding Mineflayer API to actually execute the move.
+
+Factorio uses the same pattern, communicating with the game server via the [Factorio RCON API implementation](https://github.com/nekomeowww/factorio-rcon-api). See the [AIRI Factorio](https://github.com/moeru-ai/airi-factorio) sub-project for details.
+
+### What could be done by combining OpenClaw with AIRI?
+
+[OpenClaw](https://github.com/openclaw/openclaw) is a local-first personal AI assistant that supports 20+ messaging platforms (WhatsApp, Signal, iMessage/BlueBubbles, LINE, Slack, Matrix, Microsoft Teams, IRC, Twitch, and more), voice wake/listen on macOS/iOS/Android, a Live Canvas, and a rich tool/skill system. Combining the two projects unlocks compelling complementary capabilities:
+
+**What OpenClaw brings to AIRI:**
+
+- **Universal messaging inbox**: AIRI currently has native adapters for Discord and Telegram. OpenClaw covers the remaining 20+ platforms. Using OpenClaw as a unified message gateway, アイリ can interact with fans on WhatsApp, Signal, iMessage, LINE, Slack, Matrix, and more — without writing a separate adapter for each one.
+- **Voice wake & continuous voice mode**: OpenClaw provides Voice Wake and Talk Mode on macOS/iOS/Android, which can feed directly into アイリ's speech-recognition pipeline, giving the character a truly hands-free, always-listening interaction mode.
+- **Live Canvas for avatar display**: OpenClaw's agent-driven Canvas (A2UI) renders interactive visual content on macOS/iOS/Android and could be used to display アイリ's VRM or Live2D avatar, making OpenClaw's assistant appear as a full VTuber character.
+- **Tools & skills**: OpenClaw's built-in tools (browser, cron, canvas operations, etc.) can be exposed to アイリ's LLM as callable skills, expanding what the character can do autonomously.
+
+**What AIRI brings to OpenClaw:**
+
+- **VTuber persona & virtual avatar**: OpenClaw has no built-in character or avatar. AIRI contributes full Live2D/VRM rendering with auto-blinking, gaze tracking, expressions, and animations — giving OpenClaw's assistant a face, a voice, and a personality.
+- **Autonomous game agents**: AIRI's Minecraft/Factorio game agents can push live updates to users over any of OpenClaw's channels — for example, broadcasting Minecraft adventure updates to a WhatsApp group in real time.
+- **Roleplay & emotional dialogue**: AIRI's roleplay-optimized reasoning, emotion expression, and multi-turn conversation can inject a personalized "soul" into OpenClaw's general-purpose assistant pipeline.
+
+**Technical integration path:**
+
+This pattern is already implemented in `services/openclaw/` in this repository:
+
+1. `services/openclaw/` is an OpenClaw adapter service that uses `@proj-airi/server-sdk` to connect to AIRI's WebSocket event bus, while also starting an HTTP listener on port 6122 (configurable).
+2. Configure OpenClaw to POST inbound messages to `http://localhost:6122/webhook`. The adapter wraps them as `input:text` events.
+3. The adapter listens for AIRI's `output:gen-ai:chat:message` events and can route responses back through OpenClaw to the originating channel (WhatsApp, Signal, iMessage, etc.).
+
 ## Current Progress
 
 Capable of

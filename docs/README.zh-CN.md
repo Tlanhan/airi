@@ -190,6 +190,100 @@
 >
 > **如果你已经感兴趣了，为什么不来这里和大家打个招呼呢？[Would like to join part of us to build AIRI?](https://github.com/moeru-ai/airi/discussions/33)**
 
+## 常见问题（FAQ）
+
+### 这是一个什么项目？
+
+Project AIRI 是一个开源的 AI VTuber（虚拟 YouTuber）平台，深受 [Neuro-sama](https://www.youtube.com/@Neurosama) 启发。它提供了一个"灵魂容器"，让 AI 驱动的虚拟角色能够：
+
+- 与用户进行实时对话
+- 自主玩游戏（Minecraft、Factorio 等）
+- 通过 Discord、Telegram 等平台与粉丝互动
+- 以 Live2D 或 VRM 模型呈现，拥有表情、动作和语音
+
+### 它能做什么？
+
+详见下方[当前进度](#当前进度)章节。简而言之，アイリ 目前可以：
+
+- 🧠 **大脑**：连接各类 LLM 服务商（OpenAI、Claude、DeepSeek 等），进行角色扮演与对话
+- 👂 **耳朵**：语音识别（浏览器 / Discord 音频输入）
+- 👄 **嘴巴**：语音合成（ElevenLabs 等 TTS 服务）
+- 🎮 **游戏代理**：自主玩 Minecraft、Factorio
+- 💬 **聊天集成**：在 Telegram、Discord 中实时聊天
+- 🧍 **虚拟形象**：支持 VRM 与 Live2D 模型，带有自动眨眼、视线跟踪等动画
+
+### 是否支持魔改？
+
+**当然支持！** Project AIRI 以 [MIT 许可证](../LICENSE)开源，你可以自由地：
+
+- **Fork 并修改**：按照自己的需求定制任何部分，包括 UI、角色设定、行为逻辑等
+- **添加新功能**：项目已有 WIP 插件系统，未来将支持更灵活的扩展方式
+- **更换 LLM 服务商**：支持 20 余种 LLM 服务商，也支持 Ollama、vLLM 等本地部署方案
+- **替换角色模型**：可以替换为你喜欢的 VRM 或 Live2D 模型
+- **集成新游戏或平台**：参考现有的 Minecraft / Factorio 代理实现，接入其他游戏或通讯平台
+
+欢迎将你的魔改以 PR 的形式贡献回主仓库！有任何问题，欢迎加入我们的 [Discord](https://discord.gg/TgQ3Cu2F7A) 社区交流。
+
+### 与用户进行实时对话，是只能通过对话框吗？还是可以后台运行功能并主动通知用户？
+
+**不仅限于对话框。** アイリ 使用基于 WebSocket 的事件总线连接所有模块，支持双向通信，因此**可以在后台执行任务并主动向用户发送消息**。
+
+具体来说：
+
+- **主动推送消息（无需等待用户发言）**：Discord 适配器会持续监听 `output:gen-ai:chat:message` 事件；一旦 アイリ 内部产生输出（例如完成游戏任务、触发某个事件），Discord 适配器会直接向频道发送消息，完全不需要用户先说话。
+- **后台定时循环**：Telegram bot 内置了周期性自主循环（`loopPeriodic()`），即使没有新消息，也会定期扫描各聊天窗口、读取未读消息、自主生成并发出回复。
+- **模块健康通知**：Server Runtime 会监控所有连接模块的心跳，当某个模块离线或异常时，会自动向所有已认证的客户端广播健康状态事件。
+
+简而言之，アイリ 的通信模型不是"请求-响应"式的聊天框，而是一个事件驱动的实时管道——任何模块都可以在任意时刻主动向其他模块或用户推送消息。
+
+### 自主玩游戏是怎么实现的？
+
+以 Minecraft 为例，アイリ 使用了一套**四层认知架构**，让 LLM 能够在游戏世界中自主感知、决策、行动：
+
+```
+感知层（Perception）：原始游戏事件 → 结构化信号
+    ↓
+反射层（Reflex）：基于规则的快速反应
+    ↓
+意识层（Conscious）：LLM 推理与规划
+    ↓
+行动层（Action）：调用游戏 API 执行操作
+```
+
+**技术实现细节：**
+
+- **游戏接入**：使用 [Mineflayer](https://github.com/PrismarineJS/mineflayer) 库连接 Minecraft 服务器，并加载寻路（`mineflayer-pathfinder`）、战斗（`mineflayer-pvp`）、自动进食（`mineflayer-auto-eat`）等插件。
+- **感知层**：订阅 Mineflayer 的原始事件（玩家移动、方块变化、实体状态、聊天消息等），通过规则引擎将其转化为更高层次的"信号"（如"玩家在附近""血量下降"）传入意识层。
+- **意识层（LLM 推理）**：核心是一个事件优先级队列。玩家直接发言优先级最高（0），其次是游戏感知事件（1），其次是行动反馈（2）。每一轮，LLM 接收当前游戏状态 + 历史消息 + 可用行动列表，输出下一步行动指令。
+- **行动层**：LLM 输出结构化的行动（如 `goToPlayer`、`collectBlock`、`chat`），由行动注册表校验参数后，调用对应的 Mineflayer API 实际执行。
+
+Factorio 的实现思路相同，通过 [RCON API 实现](https://github.com/nekomeowww/factorio-rcon-api) 与游戏服务器通信。详见 [AIRI Factorio](https://github.com/moeru-ai/airi-factorio) 子项目。
+
+### 如果将 OpenClaw 与 AIRI 结合，能做什么？
+
+[OpenClaw](https://github.com/openclaw/openclaw) 是一个本地优先（local-first）的个人 AI 助手，支持 20 余个消息平台（WhatsApp、Signal、iMessage/BlueBubbles、LINE、Slack、Matrix、Microsoft Teams、IRC、Twitch 等）并提供语音唤醒、Live Canvas 以及丰富的工具/技能系统。将两者结合，可以实现以下互补：
+
+**OpenClaw 为 AIRI 提供：**
+
+- **多平台消息入口**：AIRI 目前原生支持 Discord 和 Telegram，而 OpenClaw 覆盖了其余 20 余个平台。通过将 OpenClaw 作为统一的消息网关，无需单独为每个平台编写适配器，アイリ 就能与 WhatsApp、Signal、iMessage、LINE、Slack、Matrix 等平台上的粉丝互动。
+- **语音唤醒与持续对话**：OpenClaw 在 macOS/iOS/Android 上支持语音唤醒（Voice Wake）和持续对话模式（Talk Mode），可作为 アイリ 语音识别管道的输入端，为 アイリ 提供真正"免提"的交互体验。
+- **Live Canvas 展示**：OpenClaw 的 Canvas 可在 macOS/iOS/Android 上渲染 agent 驱动的视觉界面（A2UI），可以用来展示 アイリ 的 VRM 或 Live2D 虚拟形象，让 OpenClaw 的助手以 VTuber 角色呈现。
+- **工具/技能系统**：OpenClaw 拥有浏览器工具、定时任务（cron）、Canvas 操作等内置技能，可暴露给 アイリ 的 LLM 作为可调用能力，扩展 アイリ 的行动范围。
+
+**AIRI 为 OpenClaw 提供：**
+
+- **VTuber 角色与虚拟形象**：OpenClaw 没有内置虚拟形象，AIRI 为其提供完整的 Live2D/VRM 角色渲染、自动眨眼、视线跟踪、表情与动作，让 OpenClaw 助手真正"有脸有声"。
+- **游戏自主代理**：AIRI 的 Minecraft/Factorio 游戏代理可通过 OpenClaw 的任意频道将游戏进展推送给用户——例如在 WhatsApp 上实时播报 Minecraft 冒险动态。
+- **角色扮演与情感对话**：AIRI 针对 VTuber 场景优化了角色扮演、情绪表达和多轮对话，可为 OpenClaw 的通用助手流程注入个性化"灵魂"。
+
+**技术集成路径：**
+
+两者的桥接方式与现有 Discord/Telegram 适配器完全相同，已在本仓库的 `services/openclaw/` 中实现：
+
+1. `services/openclaw/` 中的 OpenClaw 适配器使用 `@proj-airi/server-sdk` 连接 AIRI 的 WebSocket 事件总线，并在本地启动一个 HTTP 监听服务（默认端口 6122）。
+2. 在 OpenClaw 中配置 Webhook 频道，将入站消息 POST 到 `http://localhost:6122/webhook`，适配器将其包装为 `input:text` 事件发送给 AIRI。
+3. 适配器监听 AIRI 的 `output:gen-ai:chat:message` 事件，将 アイリ 的回复经由 OpenClaw 路由回原始频道（WhatsApp、Signal、iMessage 等）。
+
 ## 当前进度
 
 目前已经能做到：

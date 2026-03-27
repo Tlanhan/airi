@@ -10,10 +10,12 @@ import workletUrl from '@proj-airi/stage-ui/workers/vad/process.worklet?worker&u
 import { BackgroundProvider } from '@proj-airi/stage-layouts/components/Backgrounds'
 import { useBackgroundThemeColor } from '@proj-airi/stage-layouts/composables/theme-color'
 import { useBackgroundStore } from '@proj-airi/stage-layouts/stores/background'
+import { ChatBubbleMinimalism } from '@proj-airi/stage-ui/components'
 import { WidgetStage } from '@proj-airi/stage-ui/components/scenes'
 import { useAudioRecorder } from '@proj-airi/stage-ui/composables/audio/audio-recorder'
 import { useVAD } from '@proj-airi/stage-ui/stores/ai/models/vad'
 import { useChatOrchestratorStore } from '@proj-airi/stage-ui/stores/chat'
+import { useChatStreamStore } from '@proj-airi/stage-ui/stores/chat/stream-store'
 import { useLive2d } from '@proj-airi/stage-ui/stores/live2d'
 import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consciousness'
 import { useHearingSpeechInputPipeline } from '@proj-airi/stage-ui/stores/modules/hearing'
@@ -52,6 +54,45 @@ const providersStore = useProvidersStore()
 const consciousnessStore = useConsciousnessStore()
 const { activeProvider: activeChatProvider, activeModel: activeChatModel } = storeToRefs(consciousnessStore)
 const chatStore = useChatOrchestratorStore()
+const { sending } = storeToRefs(chatStore)
+const chatStreamStore = useChatStreamStore()
+const { streamingMessage } = storeToRefs(chatStreamStore)
+
+// --- Chat bubble overlay -----------------------------------------------
+// Shown whenever AIRI is generating a response (from any source: OpenClaw,
+// voice, manual input, etc.). After the stream ends the final text stays
+// visible for 5 s and then the bubble fades out.
+const showBubble = ref(false)
+const bubbleTextCache = ref('')
+let hideBubbleTimeout: ReturnType<typeof setTimeout> | undefined
+
+// NOTICE: flush:'sync' is required here because finalizeStream() resets
+// streamingMessage.content back to '' synchronously, and sending is set to
+// false immediately after in the same call-stack tick. Without sync flush the
+// default async watcher would only see the already-reset '' value, losing the
+// final response text. With sync flush this watcher fires on every token as it
+// arrives, keeping bubbleTextCache up-to-date so it survives the reset.
+watch(() => streamingMessage.value?.content, (content) => {
+  if (content)
+    bubbleTextCache.value = content
+}, { flush: 'sync' })
+
+watch(sending, (isNowSending, wasSending) => {
+  if (isNowSending) {
+    clearTimeout(hideBubbleTimeout)
+    bubbleTextCache.value = '' // clear previous response before new one starts
+    showBubble.value = true
+    return
+  }
+  if (wasSending) {
+    // bubbleTextCache was kept up-to-date by the sync watcher above,
+    // so it still holds the final response text even after finalizeStream reset.
+    hideBubbleTimeout = setTimeout(() => {
+      showBubble.value = false
+      bubbleTextCache.value = ''
+    }, 5000)
+  }
+})
 
 const shouldUseStreamInput = computed(() => supportsStreamInput.value && !!stream.value)
 
@@ -136,6 +177,7 @@ watch(enabled, async (val) => {
 
 onUnmounted(() => {
   stopAudioInteraction()
+  clearTimeout(hideBubbleTimeout)
 })
 
 watch([stream, () => vadLoaded.value], async ([s, loaded]) => {
@@ -165,17 +207,46 @@ watch([stream, () => vadLoaded.value], async ([s, loaded]) => {
       </div>
       <!-- page -->
       <div relative flex="~ 1 row gap-y-0 gap-x-2 <md:col">
-        <WidgetStage
-          flex-1 min-w="1/2"
-          :paused="paused"
-          :focus-at="{
-            x: positionCursor.x.value,
-            y: positionCursor.y.value,
-          }"
-          :x-offset="`${isMobile ? position.x : position.x - 10}%`"
-          :y-offset="positionInPercentageString.y"
-          :scale="scale"
-        />
+        <!-- Avatar stage + floating chat-bubble overlay -->
+        <div
+          :class="['relative', 'flex-1', 'min-w-1/2']"
+        >
+          <WidgetStage
+            h-full w-full
+            :paused="paused"
+            :focus-at="{
+              x: positionCursor.x.value,
+              y: positionCursor.y.value,
+            }"
+            :x-offset="`${isMobile ? position.x : position.x - 10}%`"
+            :y-offset="positionInPercentageString.y"
+            :scale="scale"
+          />
+          <!-- Chat bubble: appears when AIRI is generating a response
+               (e.g. triggered by an OpenClaw webhook message) -->
+          <Transition
+            enter-active-class="transition-opacity duration-300"
+            enter-from-class="opacity-0"
+            enter-to-class="opacity-100"
+            leave-active-class="transition-opacity duration-300"
+            leave-from-class="opacity-100"
+            leave-to-class="opacity-0"
+          >
+            <div
+              v-if="showBubble && !isMobile"
+              :class="[
+                'absolute bottom-10 right-4 z-10',
+                'w-72',
+              ]"
+            >
+              <ChatBubbleMinimalism
+                :loading="sending && !bubbleTextCache"
+                :text="bubbleTextCache || undefined"
+                side="right"
+              />
+            </div>
+          </Transition>
+        </div>
         <InteractiveArea v-if="!isMobile" h="85dvh" absolute right-4 flex flex-1 flex-col max-w="500px" min-w="30%" />
         <MobileInteractiveArea v-if="isMobile" @settings-open="handleSettingsOpen" />
       </div>

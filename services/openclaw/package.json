@@ -1,0 +1,27 @@
+{
+  "name": "@proj-airi/openclaw",
+  "type": "module",
+  "private": true,
+  "description": "OpenClaw integration service for AIRI — bridges OpenClaw message notifications to the AIRI avatar stage",
+  "author": {
+    "name": "Moeru AI Project AIRI Team",
+    "email": "airi@moeru.ai",
+    "url": "https://github.com/moeru-ai"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moeru-ai/airi.git",
+    "directory": "services/openclaw"
+  },
+  "scripts": {
+    "dev": "tsx --env-file=.env --env-file-if-exists=.env.local src/index.ts",
+    "start": "tsx --env-file=.env --env-file-if-exists=.env.local src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@guiiai/logg": "catalog:",
+    "@proj-airi/server-sdk": "workspace:^",
+    "tsx": "^4.21.0"
+  }
+}

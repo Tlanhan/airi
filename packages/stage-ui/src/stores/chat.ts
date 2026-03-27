@@ -126,14 +126,13 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
 
     sending.value = true
 
-    const isForegroundSession = () => sessionId === activeSessionId.value
-
     const buildingMessage: StreamingAssistantMessage = { role: 'assistant', content: '', slices: [], tool_results: [], createdAt: Date.now(), id: nanoid() }
 
+    // Always update the streaming message regardless of which session is active so that
+    // messages from external sources (OpenClaw, Discord, etc.) show their response in the
+    // chat bubble even when the incoming session is not the currently-viewed session.
     const updateUI = () => {
-      if (isForegroundSession()) {
-        streamingMessage.value = JSON.parse(JSON.stringify(buildingMessage))
-      }
+      streamingMessage.value = JSON.parse(JSON.stringify(buildingMessage))
     }
 
     updateUI()
@@ -346,9 +345,7 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
         toolCalls: sessionMessagesForSend.filter(msg => msg.role === 'tool') as ToolMessage[],
       }, streamingMessageContext)
 
-      if (isForegroundSession()) {
-        streamingMessage.value = { role: 'assistant', content: '', slices: [], tool_results: [] }
-      }
+      streamingMessage.value = { role: 'assistant', content: '', slices: [], tool_results: [] }
     }
     catch (error) {
       console.error('Error sending message:', error)
